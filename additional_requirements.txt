@@ -1,1 +1,2 @@
 pydocstyle==2.1.1
+coveralls==1.5.1

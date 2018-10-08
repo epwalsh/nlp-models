@@ -53,6 +53,12 @@ jobs:
             . venv/bin/activate
             make unit-test
 
+      - run:
+          name: Submitting coverage report
+          command: |
+            . venv/bin/activate
+            coveralls
+
 workflows:
   version: 2
   test:
