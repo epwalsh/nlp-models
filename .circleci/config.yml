@@ -1,0 +1,70 @@
+defaults: &defaults
+  docker:
+    - image: circleci/python:3.6
+  working_directory: ~/nlp-models
+
+version: 2
+jobs:
+  setup_and_run_checks:
+    <<: *defaults
+    steps:
+      - checkout
+      - run:
+          name: Cloning latest AllenNLP
+          command: |
+            git clone --depth=1 --branch=master https://github.com/allenai/allennlp.git allennlp
+            rm -rf allennlp/.git
+
+      - restore_cache:
+          name: Restoring dependencies cache
+          keys:
+            - deps-{{ checksum "allennlp/requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
+            - deps-
+
+      - run:
+          name: Installing dependencies
+          command: |
+            python3 -m venv venv
+            . venv/bin/activate
+            cd allennlp && ./scripts/install_requirements.sh && cd -
+            pip install -r additional_requirements.txt
+
+      - save_cache:
+          name: Saving dependencies cache
+          key: deps-{{ checksum "allennlp/requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
+          paths:
+            - venv
+
+      - run:
+          name: Running code linters
+          command: |
+            . venv/bin/activate
+            make lint
+
+      - run:
+          name: Running type checks
+          command: |
+            . venv/bin/activate
+            make typecheck
+
+      - run:
+          name: Running unit tests
+          command: |
+            . venv/bin/activate
+            make unit-test
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - setup_and_run_checks
+  nightly:
+    jobs:
+      - setup_and_run_checks
+    triggers:
+      - schedule:
+          cron: "0 7 * * *"
+          filters:
+            branches:
+              only:
+                - master

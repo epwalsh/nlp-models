@@ -1,0 +1,3 @@
+[pydocstyle]
+ignore = D105,D107,D203,D212,D100,D103,D101,D102,D200,D413,D400,D205,D404
+match = (?!.*/?(test_|scratch|conftest|__init__)).*\.py
