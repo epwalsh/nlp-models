@@ -1,0 +1,3 @@
+Answer "y" to all prompts of "rm -rf foo"	yes | rm -ri foo
+change cgi files to mode 755	find htdocs cgi-bin -name "*.cgi" -type f -exec chmod 755 {} \;
+Extracts a bz2 file.	bunzip2 file.bz2

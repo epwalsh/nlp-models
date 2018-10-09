@@ -58,14 +58,30 @@ class CopyNetDatasetReader(Seq2SeqDatasetReader):
                          source_add_start_token=True,
                          lazy=lazy)
 
+    def _preprocess_source(self, source_string: str) -> str:  # pylint: disable=no-self-use
+        """
+        Apply preprocessing steps to the source string. Right now this doesn't
+        do anything because it's meant to be overridden by subclasses.
+        """
+        return source_string
+
+    def _preprocess_target(self, target_string: str) -> str:  # pylint: disable=no-self-use
+        """
+        Apply preprocessing steps to the target string. Right now this doesn't
+        do anything because it's meant to be overridden by subclasses.
+        """
+        return target_string
+
     @overrides
     def text_to_instance(self, source_string: str, target_string: str = None) -> Instance:  # type: ignore
         # pylint: disable=arguments-differ
+        source_string = self._preprocess_source(source_string)
         tokenized_source = self._source_tokenizer.tokenize(source_string)
         tokenized_source.insert(0, Token(START_SYMBOL))
         tokenized_source.append(Token(END_SYMBOL))
         source_field = TextField(tokenized_source, self._source_token_indexers)
         if target_string is not None:
+            target_string = self._preprocess_target(target_string)
             tokenized_target = self._target_tokenizer.tokenize(target_string)
             tokenized_target.insert(0, Token(START_SYMBOL))
             tokenized_target.append(Token(END_SYMBOL))

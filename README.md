@@ -21,3 +21,7 @@ After AllenNLP is installed, you can define your own experiments with an AllenNL
 ## Models implemented
 
 - [CopyNet](https://arxiv.org/abs/1603.06393): A sequence-to-sequence model that incorporates a copying mechanism, which enables the model to copy tokens from the source sentence into the target sentence even if they are not part of the target vocabulary. This architecture has shown promising results on machine translation and semantic parsing tasks.
+
+## Datasets
+
+- [NL2Bash](http://arxiv.org/abs/1802.08979): A challenging dataset that consists of bash one-liners along with corresponding expert descriptions. The goal is to translate the natural language descriptions into the bash commands.
