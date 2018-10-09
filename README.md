@@ -17,3 +17,7 @@ python setup.py develop
 
 After AllenNLP is installed, you can define your own experiments with an AllenNLP model config file, and then run
 `make train` from the command line.
+
+## Models implemented
+
+- [CopyNet](https://arxiv.org/abs/1603.06393): A sequence-to-sequence model that incorporates a copying mechanism, which enables the model to copy tokens from the source sentence into the target sentence even if they are not part of the target vocabulary. This architecture has shown promising results on machine translation and semantic parsing tasks.
