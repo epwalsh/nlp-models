@@ -44,5 +44,9 @@ test : typecheck lint unit-test
 
 .PHONY: create-branch
 create-branch :
-	git checkout -b ISSUE=$(issue)
-	git push --set-upstream origin ISSUE=$(issue)
+ifeq ($(issue),)
+$(error must supply 'issue' parameter)
+else
+	git checkout -b ISSUE-$(issue)
+	git push --set-upstream origin ISSUE-$(issue)
+endif
