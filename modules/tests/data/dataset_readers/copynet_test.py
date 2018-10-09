@@ -24,7 +24,7 @@ class TestCopyNetReader(AllenNlpTestCase):
     def test_source_indices(self):
         source_indices = self.instances[0].fields["source_indices"]
 
-        # shape should be (target length, source_length)
+        # shape should be (target_length, source_length - 2)
         assert source_indices.array.shape == (10, 9)
 
         check = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0],  # @START@
