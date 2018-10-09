@@ -5,8 +5,8 @@ from scipy.misc import logsumexp
 import torch
 
 from allennlp.common.testing import ModelTestCase
-from modules.models.copynet import CopyNet  # pylint: disable=unused-import
-from modules.data.dataset_readers.copynet import CopyNetDatasetReader  # pylint: disable=unused-import
+from modules.models import CopyNet  # pylint: disable=unused-import
+from modules.data.dataset_readers import CopyNetDatasetReader  # pylint: disable=unused-import
 
 
 class CopyNetTest(ModelTestCase):

@@ -2,12 +2,13 @@ test       = modules
 COVERAGE  := $(addprefix --cov=, $(test))
 PYTHONPATH = allennlp
 
-.PHONY : clean
-clean :
-	@find . \
-		| grep -E "(__pycache__|\.mypy_cache|\.pytest_cache|\.pyc|\.pyo$$)" \
-		| xargs rm -rf
-	@rm -rf $(MODEL_DIRS)
+#
+# Training commands.
+#
+
+.PHONY : train
+train :
+	./scripts/train.sh
 
 #
 # Testing commands.

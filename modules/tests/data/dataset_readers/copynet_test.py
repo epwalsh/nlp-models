@@ -2,7 +2,7 @@ import numpy as np
 
 from allennlp.common.testing import AllenNlpTestCase
 from allennlp.common.util import ensure_list
-from modules.data.dataset_readers.copynet import CopyNetDatasetReader
+from modules.data.dataset_readers import CopyNetDatasetReader
 
 
 class TestCopyNetReader(AllenNlpTestCase):
