@@ -25,3 +25,7 @@ After AllenNLP is installed, you can define your own experiments with an AllenNL
 ## Datasets
 
 - [NL2Bash](http://arxiv.org/abs/1802.08979): A challenging dataset that consists of bash one-liners along with corresponding expert descriptions. The goal is to translate the natural language descriptions into the bash commands.
+
+## Experiments
+
+- [NL2Bash with CopyNet](./experiments/nl2bash/copynet.json): run `make experiments/nl2bash/copynet.json` to train.

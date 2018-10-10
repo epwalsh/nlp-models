@@ -245,7 +245,7 @@ class CopyNet(Model):
                         source_indices: torch.Tensor,
                         copy_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Numerically stable way of getting the log-likelihood contribution from a single timestep.
+        Get the log-likelihood contribution from a single timestep.
 
         Parameters
         ----------
@@ -259,45 +259,30 @@ class CopyNet(Model):
         -------
         Tuple[torch.Tensor, torch.Tensor], (batch_size,), (batch_size, max_input_sequence_length)
         """
-        batch_size, trimmed_source_length = copy_mask.size()
+        _, target_size = generation_scores.size()
 
-        # We use the same trick of subtracting the max before taking the exp
-        # that is used in the logsumexp function.
-        max_score, _ = torch.cat((generation_scores, copy_scores), dim=-1).max(-1)
+        mask = torch.cat((generation_scores.new_full(generation_scores.size(), 1.0), copy_mask), dim=-1)
+        # shape: (batch_size, target_vocab_size + trimmed_source_length)
 
-        stable_gen_scores = generation_scores - max_score.unsqueeze(-1)
-        stable_gen_exp_scores = stable_gen_scores.exp()
-        # shape: (batch_size, target_vocab_size)
+        all_scores = torch.cat((generation_scores, copy_scores), dim=-1)
+        # shape: (batch_size, target_vocab_size + trimmed_source_length)
 
-        stable_copy_scores = copy_scores - max_score.unsqueeze(-1)
-        stable_copy_exp_scores = stable_copy_scores.exp() * copy_mask
+        probs = util.masked_softmax(all_scores, mask)
+        # shape: (batch_size, target_vocab_size + trimmed_source_length)
+
+        selective_weights = probs[:, target_size:] * source_indices.float()
         # shape: (batch_size, trimmed_source_length)
 
-        # This mask ensures that we only add generation scores for targets that are
-        # in the target vocabulary or not in the source sentence
-        # (in which case it would be the OOV token score).
         gen_mask = ((target_tokens != self._oov_index) | (source_indices.sum(-1) == 0)).float()
         # shape: (batch_size,)
 
-        stable_gen_exp = stable_gen_exp_scores.gather(1, target_tokens.unsqueeze(1)).squeeze(-1) * gen_mask
+        step_prob = probs.gather(1, target_tokens.unsqueeze(1)).squeeze(-1) * gen_mask
         # shape: (batch_size,)
 
-        stable_copy_exp_scores_filtered = stable_copy_exp_scores * source_indices.float()
-        # shape: (batch_size, trimmed_source_length)
-
-        stable_copy_exp = stable_copy_exp_scores_filtered.sum(dim=-1)
+        step_prob = step_prob + selective_weights.sum(-1)
         # shape: (batch_size,)
 
-        # NOTE: we omit adding `max_score` back on since it would be cancelled
-        # out below anyway.
-        normalization = (stable_gen_exp_scores.sum(-1) + stable_copy_exp_scores.sum(-1)).log()
-        # shape: (batch_size,)
-
-        selective_weights = (stable_copy_exp_scores_filtered.log() -
-                             normalization.unsqueeze(-1).expand(batch_size, trimmed_source_length)).exp()
-        # shape: (batch_size, trimmed_source_length)
-
-        step_log_likelihood = (stable_gen_exp + stable_copy_exp).log() - normalization
+        step_log_likelihood = step_prob.log()
         # shape: (batch_size,)
 
         return step_log_likelihood, selective_weights

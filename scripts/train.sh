@@ -9,12 +9,21 @@ YELLOW=$(tput setaf 3)
 BOLD=$(tput bold)
 NC=$(tput sgr0) # No Color
 
+if [[ $# -gt 1 ]]; then
+    echo -e "${RED}Error: $0 takes at most 1 argument.${NC}" >&2
+    exit 1
+elif [[ $# -gt 0 ]]; then
+    model_file=$1
+fi
+
 # shellcheck disable=SC2078
 while [[ true ]]; do
     #
     # Read model definition from stdin.
     #
-    read -e -p "${BOLD}Enter model file: ${NC}" model_file
+    if [[ -z $model_file ]]; then
+        read -e -p "${BOLD}Enter model file: ${NC}" model_file
+    fi
     model_name=$(basename "${model_file}")
     model_ext="${model_name##*.}"
     model_name="${model_name%.*}"
@@ -32,6 +41,7 @@ while [[ true ]]; do
         echo -e "${RED}Error: invalid model file." >&2
         echo -e "${model_file} does not exist.${NC}" >&2
     fi
+    model_file=""
 done
 
 if [[ -d /media/data/$USER ]]; then
