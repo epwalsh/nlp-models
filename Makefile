@@ -1,6 +1,11 @@
-test       = modules
-COVERAGE  := $(addprefix --cov=, $(test))
-PYTHONPATH = allennlp
+test          = modules
+COVERAGE     := $(addprefix --cov=, $(test))
+PYTHONPATH    = allennlp
+DATADIR       = data
+DATASETS     := $(wildcard $(DATADIR)/*.tar.gz)
+EXPERIMENTDIR = experiments
+EXPERIMENTS  := $(wildcard $(EXPERIMENTDIR)/**/*.json)
+BAR := $(dir $(EXPERIMENTS))
 
 #
 # Training commands.
@@ -9,6 +14,20 @@ PYTHONPATH = allennlp
 .PHONY : train
 train :
 	./scripts/train.sh
+
+# Need this to force targets to build, even when the target file exists.
+.PHONY : phony-target
+
+$(DATADIR)/%.tar.gz : phony-target
+	@if ! [ -d $(patsubst %.tar.gz,%,$@) ]; then \
+		echo "Extracting $@ to $(patsubst %.tar.gz,%,$@)"; \
+		tar xzf $@ -C $(DATADIR); \
+	fi
+
+# Experiments depend on their datasets.
+.SECONDEXPANSION:
+$(EXPERIMENTDIR)/%.json : data/$$(shell dirname %.json).tar.gz
+	./scripts/train.sh $@
 
 #
 # Testing commands.
