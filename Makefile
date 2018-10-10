@@ -5,7 +5,6 @@ DATADIR       = data
 DATASETS     := $(wildcard $(DATADIR)/*.tar.gz)
 EXPERIMENTDIR = experiments
 EXPERIMENTS  := $(wildcard $(EXPERIMENTDIR)/**/*.json)
-BAR := $(dir $(EXPERIMENTS))
 
 #
 # Training commands.
