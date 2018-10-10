@@ -28,4 +28,4 @@ After AllenNLP is installed, you can define your own experiments with an AllenNL
 
 ## Experiments
 
-- [NL2Bash with CopyNet](./experiments/nl2bash/copynet.json): run `make experiments/nl2bash/copynet.json`.
+- [NL2Bash with CopyNet](./experiments/nl2bash/copynet.json): run `make experiments/nl2bash/copynet.json` to train.
