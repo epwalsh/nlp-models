@@ -1,0 +1,13 @@
+coverage:
+  range: 80..95
+  round: down
+  precision: 2
+  status:
+    project:
+      default:
+        target: 92
+    patch:
+      default:
+        target: 90
+ignore:
+  - "modules/tests/"
