@@ -57,7 +57,7 @@ jobs:
           name: Submitting coverage report
           command: |
             . venv/bin/activate
-            coveralls
+            codecov
 
 workflows:
   version: 2
