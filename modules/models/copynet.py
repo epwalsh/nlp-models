@@ -87,14 +87,14 @@ class CopyNet(Model):
 
         target_vocab_size = self.vocab.get_vocab_size(self._target_namespace)
 
-        # The decoder input will be a function of the previous decoder output
-        # (i.e. the hidden state from the last timestep), the embedding of the previous
-        # predicted token, an attended encoder hidden state (called "attentive read"),
-        # and another weighted sum of the encoder hidden state called the "selective read".
+        # The decoder input will be a function of the previous decoder output,
+        # the embedding of the previous predicted token, an attended encoder hidden
+        # state (called "attentive read"), and another weighted sum of the encoder hidden
+        # state called the "selective read".
         self._target_embedder = Embedding(target_vocab_size, target_embedding_dim)
         self._attention = attention
         self._input_projection_layer = Linear(
-                self.decoder_output_dim + target_embedding_dim + self.encoder_output_dim * 2,
+                target_embedding_dim + self.encoder_output_dim * 2,
                 self.decoder_input_dim)
 
         # We then run the projected decoder input through an LSTM cell to produce
@@ -208,7 +208,7 @@ class CopyNet(Model):
         selective_read = util.weighted_sum(state["encoder_outputs"][:, 1:-1], selective_weights)
         # shape: (batch_size, encoder_output_dim)
 
-        decoder_input = torch.cat((state["decoder_hidden"], embedded_input, attentive_read, selective_read), -1)
+        decoder_input = torch.cat((embedded_input, attentive_read, selective_read), -1)
         # shape: (group_size, decoder_output_dim + target_embedding_dim + encoder_output_dim * 2)
 
         projected_decoder_input = self._input_projection_layer(decoder_input)
