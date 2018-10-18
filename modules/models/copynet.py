@@ -150,29 +150,29 @@ class CopyNet(Model):
         """
         Initialize the encoded state to be passed to the first decoding time step.
         """
-        embedded_input = self._source_embedder(source_tokens)
         # shape: (batch_size, max_input_sequence_length, encoder_input_dim)
+        embedded_input = self._source_embedder(source_tokens)
 
         batch_size, _, _ = embedded_input.size()
 
-        source_mask = util.get_text_field_mask(source_tokens)
         # shape: (batch_size, max_input_sequence_length)
+        source_mask = util.get_text_field_mask(source_tokens)
 
-        encoder_outputs = self._encoder(embedded_input, source_mask)
         # shape: (batch_size, max_input_sequence_length, encoder_output_dim)
+        encoder_outputs = self._encoder(embedded_input, source_mask)
 
+        # shape: (batch_size, encoder_output_dim)
         final_encoder_output = util.get_final_encoder_states(
                 encoder_outputs,
                 source_mask,
                 self._encoder.is_bidirectional())
-        # shape: (batch_size, encoder_output_dim)
 
         # Initialize the decoder hidden state with the final output of the encoder.
+        # shape: (batch_size, decoder_output_dim)
         decoder_hidden = final_encoder_output
-        # shape: (batch_size, decoder_output_dim)
 
-        decoder_context = encoder_outputs.new_zeros(batch_size, self.decoder_output_dim)
         # shape: (batch_size, decoder_output_dim)
+        decoder_context = encoder_outputs.new_zeros(batch_size, self.decoder_output_dim)
 
         state = {
                 "source_mask": source_mask,
@@ -192,27 +192,27 @@ class CopyNet(Model):
                       last_predictions: torch.Tensor,
                       selective_weights: torch.Tensor,
                       state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        encoder_outputs_mask = state["source_mask"].float()
         # shape: (batch_size, max_input_sequence_length, encoder_output_dim)
+        encoder_outputs_mask = state["source_mask"].float()
 
-        embedded_input = self._target_embedder(last_predictions)
         # shape: (group_size, target_embedding_dim)
+        embedded_input = self._target_embedder(last_predictions)
 
+        # shape: (batch_size, max_input_sequence_length)
         attentive_weights = self._attention(
                 state["decoder_hidden"], state["encoder_outputs"], encoder_outputs_mask)
-        # shape: (batch_size, max_input_sequence_length)
 
+        # shape: (batch_size, encoder_output_dim)
         attentive_read = util.weighted_sum(state["encoder_outputs"], attentive_weights)
-        # shape: (batch_size, encoder_output_dim)
 
+        # shape: (batch_size, encoder_output_dim)
         selective_read = util.weighted_sum(state["encoder_outputs"][:, 1:-1], selective_weights)
-        # shape: (batch_size, encoder_output_dim)
 
-        decoder_input = torch.cat((state["decoder_hidden"], embedded_input, attentive_read, selective_read), -1)
         # shape: (group_size, decoder_output_dim + target_embedding_dim + encoder_output_dim * 2)
+        decoder_input = torch.cat((state["decoder_hidden"], embedded_input, attentive_read, selective_read), -1)
 
-        projected_decoder_input = self._input_projection_layer(decoder_input)
         # shape: (group_size, decoder_input_dim)
+        projected_decoder_input = self._input_projection_layer(decoder_input)
 
         state["decoder_hidden"], state["decoder_context"] = self._decoder_cell(
                 projected_decoder_input,
@@ -261,29 +261,29 @@ class CopyNet(Model):
         """
         _, target_size = generation_scores.size()
 
+        # shape: (batch_size, target_vocab_size + trimmed_source_length)
         mask = torch.cat((generation_scores.new_full(generation_scores.size(), 1.0), copy_mask), dim=-1)
-        # shape: (batch_size, target_vocab_size + trimmed_source_length)
 
+        # shape: (batch_size, target_vocab_size + trimmed_source_length)
         all_scores = torch.cat((generation_scores, copy_scores), dim=-1)
-        # shape: (batch_size, target_vocab_size + trimmed_source_length)
 
+        # shape: (batch_size, target_vocab_size + trimmed_source_length)
         probs = util.masked_softmax(all_scores, mask)
-        # shape: (batch_size, target_vocab_size + trimmed_source_length)
 
-        selective_weights = probs[:, target_size:] * source_indices.float()
         # shape: (batch_size, trimmed_source_length)
+        selective_weights = probs[:, target_size:] * source_indices.float()
 
+        # shape: (batch_size,)
         gen_mask = ((target_tokens != self._oov_index) | (source_indices.sum(-1) == 0)).float()
-        # shape: (batch_size,)
 
+        # shape: (batch_size,)
         step_prob = probs.gather(1, target_tokens.unsqueeze(1)).squeeze(-1) * gen_mask
-        # shape: (batch_size,)
 
+        # shape: (batch_size,)
         step_prob = step_prob + selective_weights.sum(-1)
-        # shape: (batch_size,)
 
-        step_log_likelihood = step_prob.log()
         # shape: (batch_size,)
+        step_log_likelihood = step_prob.log()
 
         return step_log_likelihood, selective_weights
 
@@ -291,8 +291,8 @@ class CopyNet(Model):
                        target_tokens: Dict[str, torch.LongTensor],
                        source_indices: torch.Tensor,
                        state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        source_mask = state["source_mask"]
         # shape: (batch_size, max_input_sequence_length)
+        source_mask = state["source_mask"]
 
         batch_size, target_sequence_length = target_tokens["tokens"].size()
 
@@ -301,39 +301,39 @@ class CopyNet(Model):
         num_decoding_steps = target_sequence_length - 1
 
         # We initialize the target predictions with the start token.
-        input_choices = source_mask.new_full((batch_size,), fill_value=self._start_index)
         # shape: (batch_size,)
+        input_choices = source_mask.new_full((batch_size,), fill_value=self._start_index)
 
         # We use this to fill in the copy index when the previous input was copied.
-        copy_input_choices = source_mask.new_full((batch_size,), fill_value=self._copy_index)
         # shape: (batch_size,)
+        copy_input_choices = source_mask.new_full((batch_size,), fill_value=self._copy_index)
 
-        copy_mask = source_mask[:, 1:-1].float()
         # shape: (batch_size, trimmed_source_length)
+        copy_mask = source_mask[:, 1:-1].float()
 
         # We need to keep track of the probabilities assigned to tokens in the source
         # sentence that were copied during the previous timestep, since we use
         # those probabilities as weights when calculating the "selective read".
-        selective_weights = state["decoder_hidden"].new_zeros(copy_mask.size())
         # shape: (batch_size, trimmed_source_length)
+        selective_weights = state["decoder_hidden"].new_zeros(copy_mask.size())
 
-        log_likelihood = state["decoder_hidden"].new_zeros((batch_size,))
         # shape: batch_size,)
+        log_likelihood = state["decoder_hidden"].new_zeros((batch_size,))
 
         for timestep in range(num_decoding_steps):
-            input_choices = target_tokens["tokens"][:, timestep]
             # shape: (batch_size,)
+            input_choices = target_tokens["tokens"][:, timestep]
 
             # If the previous target token was copied, we use the special copy token.
             # But the end target token will always be THE end token, so we know
             # it was not copied.
             if timestep < num_decoding_steps - 1:
                 # Get mask tensor indicating which instances were copied.
+                # shape: (batch_size,)
                 copied = (source_indices[:, timestep, :].sum(-1) > 0).long()
-                # shape: (batch_size,)
 
-                input_choices = input_choices * (1 - copied) + copy_input_choices * copied
                 # shape: (batch_size,)
+                input_choices = input_choices * (1 - copied) + copy_input_choices * copied
 
             # Update the decoder state by taking a step through the RNN.
             state = self._decoder_step(input_choices, selective_weights, state)
@@ -347,11 +347,11 @@ class CopyNet(Model):
             copy_scores = self._get_copy_scores(state)
             # (batch_size, max_input_sequence_length - 2)
 
-            step_target_tokens = target_tokens["tokens"][:, timestep + 1]
             # shape: (batch_size,)
+            step_target_tokens = target_tokens["tokens"][:, timestep + 1]
 
-            step_source_indices = source_indices[:, timestep + 1]
             # shape: (batch_size, max_input_sequence_length - 2)
+            step_source_indices = source_indices[:, timestep + 1]
 
             step_log_likelihood, selective_weights = self._get_ll_contrib(generation_scores,
                                                                           copy_scores,
