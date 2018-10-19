@@ -10,10 +10,11 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Cloning latest AllenNLP
+          name: Cloning latest and AllenNLP and updating shared configs
           command: |
             git clone --depth=1 --branch=master https://github.com/allenai/allennlp.git allennlp
             rm -rf allennlp/.git
+            cp allennlp/.pylintrc ./
 
       - restore_cache:
           name: Restoring dependencies cache
