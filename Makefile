@@ -53,6 +53,10 @@ else
 	PYTHONPATH=$(PYTHONPATH) python -m pytest -v --cov-config .coveragerc $(COVERAGE) --color=yes $(test)
 endif
 
+.PHONY : check-scripts
+check-scripts :
+	./scripts/checks/run_all.sh ./scripts/checks/check_requirements.sh
+
 .PHONY : test
 test : typecheck lint unit-test
 
