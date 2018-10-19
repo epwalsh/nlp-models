@@ -37,6 +37,12 @@ jobs:
             - venv
 
       - run:
+          name: Running check scripts
+          command: |
+            . venv/bin/activate
+            make check-scripts
+
+      - run:
           name: Running code linters
           command: |
             . venv/bin/activate
