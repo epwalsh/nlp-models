@@ -90,6 +90,9 @@ class CopyNet(Model):
         # The decoder input will be a function of the embedding of the previous predicted token,
         # an attended encoder hidden state called the "attentive read", and another
         # weighted sum of the encoder hidden state called the "selective read".
+        # While the weights for the attentive read are calculated by an `Attention` module,
+        # the weights for the selective read are simply the predicted probabilities
+        # corresponding to each token in the source sentence from the previous timestep.
         self._target_embedder = Embedding(target_vocab_size, target_embedding_dim)
         self._attention = attention
         self._input_projection_layer = Linear(
@@ -127,8 +130,11 @@ class CopyNet(Model):
             Output of `Textfield.as_array()` applied on target `TextField`. We assume that the
             target tokens are also represented as a `TextField`.
         source_indices : ``Dict[str, torch.LongTensor]``, optional (default = None)
-            Holds the index of every matching source token, for each token in the target
-            sentence.
+            A sparse tensor of shape `(batch_size, target_sequence_length, source_sentence_length - 2)` that
+            indicates which tokens in the source sentence match each token in the target sequence.
+            The last dimension is `source_sentence_length - 2` because we exclude the
+            START_SYMBOL and END_SYMBOL in the source sentence (the source sentence is guaranteed
+            to contain the START_SYMBOL and END_SYMBOL).
 
         Returns
         -------
