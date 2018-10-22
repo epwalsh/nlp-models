@@ -87,10 +87,9 @@ class CopyNet(Model):
 
         target_vocab_size = self.vocab.get_vocab_size(self._target_namespace)
 
-        # The decoder input will be a function of the previous decoder output,
-        # the embedding of the previous predicted token, an attended encoder hidden
-        # state (called "attentive read"), and another weighted sum of the encoder hidden
-        # state called the "selective read".
+        # The decoder input will be a function of the embedding of the previous predicted token,
+        # an attended encoder hidden state called the "attentive read", and another
+        # weighted sum of the encoder hidden state called the "selective read".
         self._target_embedder = Embedding(target_vocab_size, target_embedding_dim)
         self._attention = attention
         self._input_projection_layer = Linear(
@@ -182,11 +181,6 @@ class CopyNet(Model):
         }
 
         return state
-
-    @staticmethod
-    def _get_selective_weights(state: Dict[str, torch.Tensor]) -> torch.Tensor:
-        group_size, source_sent_length, _ = state["encoder_outputs"].size()
-        return state["encoder_outputs"].new_zeros((group_size, source_sent_length))
 
     def _decoder_step(self,
                       last_predictions: torch.Tensor,
