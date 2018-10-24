@@ -29,11 +29,11 @@ class CopyNetTest(ModelTestCase):
         inputs = self.instances[0].as_tensor_dict()
         source_tokens = inputs["source_tokens"]
         target_tokens = inputs["target_tokens"]
-        source_indices = inputs["source_indices"]
+        copy_indicators = inputs["copy_indicators"]
 
         assert list(source_tokens["tokens"].size()) == [11]
         assert list(target_tokens["tokens"].size()) == [10]
-        assert list(source_indices.size()) == [10, 9]
+        assert list(copy_indicators.size()) == [10, 9]
 
         assert target_tokens["tokens"][0] == self.model._start_index
         assert target_tokens["tokens"][4] == self.model._oov_index
@@ -68,7 +68,7 @@ class CopyNetTest(ModelTestCase):
                                       self.model._oov_index])
         # shape: (batch_size,)
 
-        source_indices = torch.tensor([[0, 1, 0],
+        copy_indicators = torch.tensor([[0, 1, 0],
                                        [0, 0, 0],
                                        [1, 0, 1]])
         # shape: (batch_size, trimmed_input_len)
@@ -107,7 +107,7 @@ class CopyNetTest(ModelTestCase):
         ll_actual, selective_weights_actual = self.model._get_ll_contrib(generation_scores,
                                                                          copy_scores,
                                                                          target_tokens,
-                                                                         source_indices,
+                                                                         copy_indicators,
                                                                          copy_mask)
 
         np.testing.assert_almost_equal(ll_actual.data.numpy(),

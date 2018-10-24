@@ -21,11 +21,11 @@ class TestCopyNetReader(AllenNlpTestCase):
         assert [t.text for t in fields["target_tokens"].tokens] == \
             ["@start@", "the", "tokens", "\"", "hello", "world", "\"", "were", "copied", "@end@"]
 
-    def test_source_indices(self):
-        source_indices = self.instances[0].fields["source_indices"]
+    def test_copy_indicators(self):
+        copy_indicators = self.instances[0].fields["copy_indicators"]
 
         # shape should be (target_length, source_length - 2)
-        assert source_indices.array.shape == (10, 9)
+        assert copy_indicators.array.shape == (10, 9)
 
         check = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0],  # @START@
                           [0, 0, 0, 0, 0, 0, 0, 0, 0],  # the
@@ -37,4 +37,4 @@ class TestCopyNetReader(AllenNlpTestCase):
                           [0, 0, 0, 0, 0, 0, 0, 0, 0],  # were
                           [0, 0, 0, 0, 1, 0, 0, 0, 0],  # copied
                           [0, 0, 0, 0, 0, 0, 0, 0, 0]]) # @END@
-        np.testing.assert_equal(source_indices.array, check)
+        np.testing.assert_equal(copy_indicators.array, check)

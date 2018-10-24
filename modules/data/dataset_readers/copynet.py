@@ -89,7 +89,7 @@ class CopyNetDatasetReader(Seq2SeqDatasetReader):
 
             # For each token in the target sentence, we keep track of the index
             # of every token in the source sentence that matches.
-            source_index_array: List[List[int]] = []
+            copy_indicator_array: List[List[int]] = []
             for tgt_tok in tokenized_target[1:-1]:
                 source_index_list: List[int] = []
                 for src_tok in tokenized_source[1:-1]:
@@ -97,14 +97,14 @@ class CopyNetDatasetReader(Seq2SeqDatasetReader):
                         source_index_list.append(1)
                     else:
                         source_index_list.append(0)
-                source_index_array.append(source_index_list)
-            source_index_array.insert(0, [0] * len(tokenized_source[1:-1]))
-            source_index_array.append([0] * len(tokenized_source[1:-1]))
-            source_index_field = ArrayField(np.array(source_index_array))
+                copy_indicator_array.append(source_index_list)
+            copy_indicator_array.insert(0, [0] * len(tokenized_source[1:-1]))
+            copy_indicator_array.append([0] * len(tokenized_source[1:-1]))
+            copy_indicator_field = ArrayField(np.array(copy_indicator_array))
             # shape: (target_length, source_length)
 
             return Instance({"source_tokens": source_field,
                              "target_tokens": target_field,
-                             "source_indices": source_index_field})
+                             "copy_indicators": copy_indicator_field})
         else:
             return Instance({'source_tokens': source_field})

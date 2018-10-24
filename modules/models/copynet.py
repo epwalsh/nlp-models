@@ -119,7 +119,7 @@ class CopyNet(Model):
     def forward(self,  # type: ignore
                 source_tokens: Dict[str, torch.LongTensor],
                 target_tokens: Dict[str, torch.LongTensor] = None,
-                source_indices: torch.Tensor = None) -> Dict[str, torch.Tensor]:
+                copy_indicators: torch.Tensor = None) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
         """
         Make foward pass with decoder logic for producing the entire target sequence.
@@ -132,7 +132,7 @@ class CopyNet(Model):
         target_tokens : ``Dict[str, torch.LongTensor]``, optional (default = None)
             Output of `Textfield.as_array()` applied on target `TextField`. We assume that the
             target tokens are also represented as a `TextField`.
-        source_indices : ``Dict[str, torch.LongTensor]``, optional (default = None)
+        copy_indicators : ``Dict[str, torch.LongTensor]``, optional (default = None)
             A sparse tensor of shape `(batch_size, target_sequence_length, source_sentence_length - 2)` that
             indicates which tokens in the source sentence match each token in the target sequence.
             The last dimension is `source_sentence_length - 2` because we exclude the
@@ -146,7 +146,7 @@ class CopyNet(Model):
         state = self._init_encoded_state(source_tokens)
 
         if target_tokens:
-            output_dict = self._forward_loop(target_tokens, source_indices, state)
+            output_dict = self._forward_loop(target_tokens, copy_indicators, state)
         else:
             output_dict = {}
 
@@ -155,13 +155,9 @@ class CopyNet(Model):
             output_dict.update(predictions)
             if self._metrics:
                 for metric in self._metrics:
-                    metric(source_tokens, target_tokens, source_indices, predictions)
+                    metric(source_tokens, target_tokens, copy_indicators, predictions)
 
         return output_dict
-
-    @overrides
-    def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        raise NotImplementedError
 
     def _init_encoded_state(self, source_tokens: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
@@ -254,7 +250,7 @@ class CopyNet(Model):
                         generation_scores: torch.Tensor,
                         copy_scores: torch.Tensor,
                         target_tokens: torch.Tensor,
-                        source_indices: torch.Tensor,
+                        copy_indicators: torch.Tensor,
                         copy_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get the log-likelihood contribution from a single timestep.
@@ -264,7 +260,7 @@ class CopyNet(Model):
         generation_scores : ``torch.Tensor``, (batch_size, target_vocab_size)
         copy_scores : ``torch.Tensor``, (batch_size, trimmed_source_length)
         target_tokens : ``torch.Tensor``, (batch_size,)
-        source_indices : ``torch.Tensor``, (batch_size, trimmed_source_length)
+        copy_indicators : ``torch.Tensor``, (batch_size, trimmed_source_length)
         copy_mask : ``torch.Tensor``, (batch_size, trimmed_source_length)
 
         Returns
@@ -283,10 +279,10 @@ class CopyNet(Model):
         probs = util.masked_softmax(all_scores, mask)
 
         # shape: (batch_size, trimmed_source_length)
-        selective_weights = probs[:, target_size:] * source_indices.float()
+        selective_weights = probs[:, target_size:] * copy_indicators.float()
 
         # shape: (batch_size,)
-        gen_mask = ((target_tokens != self._oov_index) | (source_indices.sum(-1) == 0)).float()
+        gen_mask = ((target_tokens != self._oov_index) | (copy_indicators.sum(-1) == 0)).float()
 
         # shape: (batch_size,)
         step_prob = probs.gather(1, target_tokens.unsqueeze(1)).squeeze(-1) * gen_mask
@@ -301,7 +297,7 @@ class CopyNet(Model):
 
     def _forward_loop(self,
                       target_tokens: Dict[str, torch.LongTensor],
-                      source_indices: torch.Tensor,
+                      copy_indicators: torch.Tensor,
                       state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # shape: (batch_size, max_input_sequence_length)
         source_mask = state["source_mask"]
@@ -342,7 +338,7 @@ class CopyNet(Model):
             if timestep < num_decoding_steps - 1:
                 # Get mask tensor indicating which instances were copied.
                 # shape: (batch_size,)
-                copied = (source_indices[:, timestep, :].sum(-1) > 0).long()
+                copied = (copy_indicators[:, timestep, :].sum(-1) > 0).long()
 
                 # shape: (batch_size,)
                 input_choices = input_choices * (1 - copied) + copy_input_choices * copied
@@ -351,24 +347,24 @@ class CopyNet(Model):
             state = self._decoder_step(input_choices, selective_weights, state)
 
             # Get generation scores for each token in the target vocab.
+            # shape: (batch_size, target_vocab_size)
             generation_scores = self._get_generation_scores(state)
-            # (batch_size, target_vocab_size)
 
             # Get copy scores for each token in the source sentence, excluding the start
             # and end tokens.
+            # shape: (batch_size, max_input_sequence_length - 2)
             copy_scores = self._get_copy_scores(state)
-            # (batch_size, max_input_sequence_length - 2)
 
             # shape: (batch_size,)
             step_target_tokens = target_tokens["tokens"][:, timestep + 1]
 
             # shape: (batch_size, max_input_sequence_length - 2)
-            step_source_indices = source_indices[:, timestep + 1]
+            step_copy_indicators = copy_indicators[:, timestep + 1]
 
             step_log_likelihood, selective_weights = self._get_ll_contrib(generation_scores,
                                                                           copy_scores,
                                                                           step_target_tokens,
-                                                                          step_source_indices,
+                                                                          step_copy_indicators,
                                                                           copy_mask)
             log_likelihood = log_likelihood + step_log_likelihood
 
@@ -377,7 +373,8 @@ class CopyNet(Model):
         return {"loss": loss}
 
     def _forward_beam_search(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        raise NotImplementedError
+        # pylint: disable=no-self-use,unused-argument
+        return {}
 
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
