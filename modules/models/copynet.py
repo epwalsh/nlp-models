@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 
 from overrides import overrides
 import torch
@@ -12,6 +12,7 @@ from allennlp.models.model import Model
 from allennlp.modules import Attention, TextFieldEmbedder, Seq2SeqEncoder
 from allennlp.modules.token_embedders import Embedding
 from allennlp.nn import util
+from allennlp.training.metrics import Metric
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -63,7 +64,8 @@ class CopyNet(Model):
                  target_embedding_dim: int = 30,
                  copy_token: str = "@COPY@",
                  source_namespace: str = "source_tokens",
-                 target_namespace: str = "target_tokens") -> None:
+                 target_namespace: str = "target_tokens",
+                 metrics: List[Metric] = None) -> None:
         super(CopyNet, self).__init__(vocab)
         self._source_namespace = source_namespace
         self._target_namespace = target_namespace
@@ -73,6 +75,7 @@ class CopyNet(Model):
         self._oov_index = self.vocab.get_token_index(self.vocab._oov_token, self._target_namespace)  # pylint: disable=protected-access
         self._src_start_index = self.vocab.get_token_index(START_SYMBOL, self._source_namespace)
         self._src_end_index = self.vocab.get_token_index(END_SYMBOL, self._source_namespace)
+        self._metrics = metrics
 
         # Encoding modules.
         self._source_embedder = source_embedder
@@ -143,9 +146,18 @@ class CopyNet(Model):
         state = self._init_encoded_state(source_tokens)
 
         if target_tokens:
-            return self._forward_loop(target_tokens, source_indices, state)
+            output_dict = self._forward_loop(target_tokens, source_indices, state)
+        else:
+            output_dict = {}
 
-        return self._forward_beam_search(state)
+        if not self.training:
+            predictions = self._forward_beam_search(state)
+            output_dict.update(predictions)
+            if self._metrics:
+                for metric in self._metrics:
+                    metric(source_tokens, target_tokens, source_indices, predictions)
+
+        return output_dict
 
     @overrides
     def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -366,3 +378,11 @@ class CopyNet(Model):
 
     def _forward_beam_search(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         raise NotImplementedError
+
+    @overrides
+    def get_metrics(self, reset: bool = False) -> Dict[str, float]:
+        all_metrics: Dict[str, float] = {}
+        if self._metrics and not self.training:
+            for metric in self._metrics:
+                all_metrics.update(metric.get_metric(reset=reset))
+        return all_metrics
