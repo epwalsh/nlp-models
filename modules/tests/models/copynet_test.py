@@ -69,8 +69,8 @@ class CopyNetTest(ModelTestCase):
         # shape: (batch_size,)
 
         copy_indicators = torch.tensor([[0, 1, 0],
-                                       [0, 0, 0],
-                                       [1, 0, 1]])
+                                        [0, 0, 0],
+                                        [1, 0, 1]])
         # shape: (batch_size, trimmed_input_len)
 
         copy_mask = torch.tensor([[1.0, 1.0, 0.0],
