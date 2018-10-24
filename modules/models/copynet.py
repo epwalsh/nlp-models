@@ -13,6 +13,7 @@ from allennlp.modules import Attention, TextFieldEmbedder, Seq2SeqEncoder
 from allennlp.modules.token_embedders import Embedding
 from allennlp.nn import util
 from allennlp.training.metrics import Metric
+from allennlp.nn.beam_search import BeamSearch
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -45,6 +46,10 @@ class CopyNet(Model):
     attention : ``Attention``, required
         This is used to get a dynamic summary of encoder outputs at each timestep
         when producing the "generation" scores for the target vocab.
+    beam_size : ``int``, required
+        Beam width to use for beam search prediction.
+    max_decoding_steps : ``int``, required
+        Maximum sequence length of target predictions.
     target_embedding_dim : ``int``, optional (default = 30)
         The size of the embeddings for the target vocabulary.
     copy_token : ``str``, optional (default = '@COPY@')
@@ -54,6 +59,8 @@ class CopyNet(Model):
         The namespace for the source vocabulary.
     target_namespace : ``str``, optional (default = 'target_tokens')
         The namespace for the target vocabulary.
+    metrics : ``List[Metric]``, optional (default = None)
+        List of metrics to track.
     """
 
     def __init__(self,
@@ -61,6 +68,8 @@ class CopyNet(Model):
                  source_embedder: TextFieldEmbedder,
                  encoder: Seq2SeqEncoder,
                  attention: Attention,
+                 beam_size: int,
+                 max_decoding_steps: int,
                  target_embedding_dim: int = 30,
                  copy_token: str = "@COPY@",
                  source_namespace: str = "source_tokens",
@@ -114,6 +123,9 @@ class CopyNet(Model):
         # (tanh) to a linear projection of the encoded hidden state for that token,
         # and then taking the dot product of the result with the decoder hidden state.
         self._output_copying_layer = Linear(self.encoder_output_dim, self.decoder_output_dim)
+
+        # At prediction time, we'll use a beam search to find the best target sequence.
+        self._beam_search = BeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size)
 
     @overrides
     def forward(self,  # type: ignore
@@ -325,9 +337,7 @@ class CopyNet(Model):
         # shape: (batch_size, trimmed_source_length)
         selective_weights = state["decoder_hidden"].new_zeros(copy_mask.size())
 
-        # shape: batch_size,)
-        log_likelihood = state["decoder_hidden"].new_zeros((batch_size,))
-
+        step_log_likelihoods = []
         for timestep in range(num_decoding_steps):
             # shape: (batch_size,)
             input_choices = target_tokens["tokens"][:, timestep]
@@ -361,13 +371,32 @@ class CopyNet(Model):
             # shape: (batch_size, max_input_sequence_length - 2)
             step_copy_indicators = copy_indicators[:, timestep + 1]
 
-            step_log_likelihood, selective_weights = self._get_ll_contrib(generation_scores,
-                                                                          copy_scores,
-                                                                          step_target_tokens,
-                                                                          step_copy_indicators,
-                                                                          copy_mask)
-            log_likelihood = log_likelihood + step_log_likelihood
+            step_log_likelihood, selective_weights = self._get_ll_contrib(
+                    generation_scores,
+                    copy_scores,
+                    step_target_tokens,
+                    step_copy_indicators,
+                    copy_mask)
+            step_log_likelihoods.append(step_log_likelihood.unsqueeze(1))
 
+        # Gather step log-likelihoods.
+        # shape: (batch_size, num_decoding_steps = target_sequence_length - 1)
+        log_likelihoods = torch.cat(step_log_likelihoods, 1)
+
+        # Get target mask to exclude likelihood contributions from timesteps after
+        # the END token.
+        # shape: (batch_size, target_sequence_length)
+        target_mask = util.get_text_field_mask(target_tokens)
+
+        # The first timestep is just the START token, which is not included in the likelihoods.
+        # shape: (batch_size, num_decoding_steps)
+        target_mask = target_mask[:, 1:].contiguous().float()
+
+        # Sum of step log-likelihoods.
+        # shape: (batch_size,)
+        log_likelihood = (log_likelihoods * target_mask).sum(dim=-1)
+
+        # The loss is the negative log-likelihood, averaged over the batch.
         loss = - log_likelihood.sum() / batch_size
 
         return {"loss": loss}

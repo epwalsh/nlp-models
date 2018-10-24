@@ -100,8 +100,9 @@ class CopyNetDatasetReader(Seq2SeqDatasetReader):
                 copy_indicator_array.append(source_index_list)
             copy_indicator_array.insert(0, [0] * len(tokenized_source[1:-1]))
             copy_indicator_array.append([0] * len(tokenized_source[1:-1]))
-            copy_indicator_field = ArrayField(np.array(copy_indicator_array))
+
             # shape: (target_length, source_length)
+            copy_indicator_field = ArrayField(np.array(copy_indicator_array))
 
             return Instance({"source_tokens": source_field,
                              "target_tokens": target_field,
