@@ -244,17 +244,17 @@ class CopyNet(Model):
         return self._output_generation_layer(state["decoder_hidden"])
 
     def _get_copy_scores(self, state: Dict[str, torch.Tensor]) -> torch.Tensor:
+        # shape: (batch_size, max_input_sequence_length - 2, encoder_output_dim)
         trimmed_encoder_outputs = state["encoder_outputs"][:, 1:-1]
-        # (batch_size, max_input_sequence_length - 2, encoder_output_dim)
 
+        # shape: (batch_size, max_input_sequence_length - 2, decoder_output_dim)
         copy_projection = self._output_copying_layer(trimmed_encoder_outputs)
-        # (batch_size, max_input_sequence_length - 2, decoder_output_dim)
 
+        # shape: (batch_size, max_input_sequence_length - 2, decoder_output_dim)
         copy_projection = torch.tanh(copy_projection)
-        # (batch_size, max_input_sequence_length - 2, decoder_output_dim)
 
+        # shape: (batch_size, max_input_sequence_length - 2)
         copy_scores = copy_projection.bmm(state["decoder_hidden"].unsqueeze(-1)).squeeze(-1)
-        # (batch_size, max_input_sequence_length - 2)
 
         return copy_scores
 
@@ -269,15 +269,21 @@ class CopyNet(Model):
 
         Parameters
         ----------
-        generation_scores : ``torch.Tensor``, (batch_size, target_vocab_size)
-        copy_scores : ``torch.Tensor``, (batch_size, trimmed_source_length)
-        target_tokens : ``torch.Tensor``, (batch_size,)
-        copy_indicators : ``torch.Tensor``, (batch_size, trimmed_source_length)
-        copy_mask : ``torch.Tensor``, (batch_size, trimmed_source_length)
+        generation_scores : ``torch.Tensor``
+            Shape: `(batch_size, target_vocab_size)`
+        copy_scores : ``torch.Tensor``
+            Shape: `(batch_size, trimmed_source_length)`
+        target_tokens : ``torch.Tensor``
+            Shape: `(batch_size,)`
+        copy_indicators : ``torch.Tensor``
+            Shape: `(batch_size, trimmed_source_length)`
+        copy_mask : ``torch.Tensor``
+            Shape: `(batch_size, trimmed_source_length)`
 
         Returns
         -------
-        Tuple[torch.Tensor, torch.Tensor], (batch_size,), (batch_size, max_input_sequence_length)
+        Tuple[torch.Tensor, torch.Tensor]
+            Shape: `(batch_size,), (batch_size, max_input_sequence_length)`
         """
         _, target_size = generation_scores.size()
 
@@ -390,7 +396,7 @@ class CopyNet(Model):
 
         # The first timestep is just the START token, which is not included in the likelihoods.
         # shape: (batch_size, num_decoding_steps)
-        target_mask = target_mask[:, 1:].contiguous().float()
+        target_mask = target_mask[:, 1:].float()
 
         # Sum of step log-likelihoods.
         # shape: (batch_size,)
