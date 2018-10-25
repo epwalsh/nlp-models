@@ -6,6 +6,7 @@ import torch
 from torch.nn.modules.linear import Linear
 from torch.nn.modules.rnn import LSTMCell
 
+from allennlp.common.checks import ConfigurationError
 from allennlp.common.util import START_SYMBOL, END_SYMBOL
 from allennlp.data.vocabulary import Vocabulary
 from allennlp.models.model import Model
@@ -76,15 +77,22 @@ class CopyNet(Model):
                  target_namespace: str = "target_tokens",
                  metrics: List[Metric] = None) -> None:
         super(CopyNet, self).__init__(vocab)
+        self._metrics = metrics
+
         self._source_namespace = source_namespace
         self._target_namespace = target_namespace
-        self._start_index = self.vocab.get_token_index(START_SYMBOL, self._target_namespace)
-        self._end_index = self.vocab.get_token_index(END_SYMBOL, self._target_namespace)
-        self._copy_index = self.vocab.add_token_to_namespace(copy_token, self._target_namespace)
-        self._oov_index = self.vocab.get_token_index(self.vocab._oov_token, self._target_namespace)  # pylint: disable=protected-access
         self._src_start_index = self.vocab.get_token_index(START_SYMBOL, self._source_namespace)
         self._src_end_index = self.vocab.get_token_index(END_SYMBOL, self._source_namespace)
-        self._metrics = metrics
+        self._start_index = self.vocab.get_token_index(START_SYMBOL, self._target_namespace)
+        self._end_index = self.vocab.get_token_index(END_SYMBOL, self._target_namespace)
+        self._oov_index = self.vocab.get_token_index(self.vocab._oov_token, self._target_namespace)  # pylint: disable=protected-access
+        self._copy_index = self.vocab.get_token_index(copy_token, self._target_namespace)
+        if self._copy_index == self._oov_index:
+            for tok in vocab.get_token_to_index_vocabulary(self._target_namespace):
+                print(tok)
+            raise ConfigurationError(f"Special copy token {copy_token} missing from target vocab namespace. "
+                                     f"You can ensure this token is added to the target namespace with the "
+                                     f"vocabulary parameter 'tokens_to_add'.")
 
         # Encoding modules.
         self._source_embedder = source_embedder

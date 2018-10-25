@@ -47,7 +47,7 @@ lint :
 .PHONY : unit-test
 unit-test :
 	@echo "Unit tests: pytest"
-ifeq ($(suffix $(test)),.py)
+ifneq ($(findstring test,$(test)),)
 	PYTHONPATH=$(PYTHONPATH) python -m pytest -v --color=yes $(test)
 else
 	PYTHONPATH=$(PYTHONPATH) python -m pytest -v --cov-config .coveragerc $(COVERAGE) --color=yes $(test)

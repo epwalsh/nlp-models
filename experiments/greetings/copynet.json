@@ -1,6 +1,6 @@
 {
   "dataset_reader": {
-    "type": "nl2bash",
+    "type": "copynet",
     "source_token_indexers": {
       "tokens": {
         "type": "single_id",
@@ -25,8 +25,8 @@
         "target_tokens": ["@COPY@"]
     }
   },
-  "train_data_path": "data/nl2bash/train.tsv",
-  "validation_data_path": "data/nl2bash/dev.tsv",
+  "train_data_path": "data/greetings/train.tsv",
+  "validation_data_path": "data/greetings/validation.tsv",
   "model": {
     "type": "copynet",
     "source_embedder": {
@@ -64,9 +64,9 @@
       "vector_dim": 200,
       "matrix_dim": 200
     },
-    "target_embedding_dim": 10
-    "beam_size": 5,
-    "max_decoding_steps": 50
+    "target_embedding_dim": 10,
+    "beam_size": 3,
+    "max_decoding_steps": 20
   },
   "iterator": {
     "type": "bucket",
