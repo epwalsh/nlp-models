@@ -20,7 +20,7 @@ After AllenNLP is installed, you can define your own experiments with an AllenNL
 
 ## Models implemented
 
-- [CopyNet](https://arxiv.org/abs/1603.06393): A sequence-to-sequence model that incorporates a copying mechanism, which enables the model to copy tokens from the source sentence into the target sentence even if they are not part of the target vocabulary. This architecture has shown promising results on machine translation and semantic parsing tasks.
+- (WIP) [CopyNet](https://arxiv.org/abs/1603.06393): A sequence-to-sequence model that incorporates a copying mechanism, which enables the model to copy tokens from the source sentence into the target sentence even if they are not part of the target vocabulary. This architecture has shown promising results on machine translation and semantic parsing tasks.
 
 ## Datasets
 
@@ -28,4 +28,8 @@ After AllenNLP is installed, you can define your own experiments with an AllenNL
 
 ## Experiments
 
-- [NL2Bash with CopyNet](./experiments/nl2bash/copynet.json): run `make experiments/nl2bash/copynet.json` to train.
+- (WIP) [NL2Bash with CopyNet](./experiments/nl2bash/copynet.json): run `make experiments/nl2bash/copynet.json` to train.
+
+## TODO
+
+- Implement beam search for CopyNet
