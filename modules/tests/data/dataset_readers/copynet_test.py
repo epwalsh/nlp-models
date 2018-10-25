@@ -1,7 +1,11 @@
+# pylint: disable=protected-access
+
 import numpy as np
 
 from allennlp.common.testing import AllenNlpTestCase
 from allennlp.common.util import ensure_list
+from allennlp.data.tokenizers import Token
+
 from modules.data.dataset_readers import CopyNetDatasetReader
 
 
@@ -21,7 +25,7 @@ class TestCopyNetReader(AllenNlpTestCase):
         assert [t.text for t in fields["target_tokens"].tokens] == \
             ["@start@", "the", "tokens", "\"", "hello", "world", "\"", "were", "copied", "@end@"]
 
-    def test_copy_indicators(self):
+    def test_copy_indicator_array(self):
         copy_indicators = self.instances[0].fields["copy_indicators"]
 
         # shape should be (target_length, source_length - 2)
@@ -38,3 +42,13 @@ class TestCopyNetReader(AllenNlpTestCase):
                           [0, 0, 0, 0, 1, 0, 0, 0, 0],  # copied
                           [0, 0, 0, 0, 0, 0, 0, 0, 0]]) # @END@
         np.testing.assert_equal(copy_indicators.array, check)
+
+    def test_source_duplicates_array(self):
+        tokens = ["@START@", "a", "cat", "is", "a", "cat", "@END@"]
+        result = self.reader._create_source_duplicates_array([Token(x) for x in tokens])
+        check = np.array([[1, 0, 0, 1, 0],  # a
+                          [0, 1, 0, 0, 1],  # cat
+                          [0, 0, 1, 0, 0],  # is
+                          [1, 0, 0, 1, 0],  # a
+                          [0, 1, 0, 0, 1]]) # cat
+        np.testing.assert_equal(result, check)

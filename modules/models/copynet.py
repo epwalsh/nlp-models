@@ -78,7 +78,6 @@ class CopyNet(Model):
                  metrics: List[Metric] = None) -> None:
         super(CopyNet, self).__init__(vocab)
         self._metrics = metrics
-
         self._source_namespace = source_namespace
         self._target_namespace = target_namespace
         self._src_start_index = self.vocab.get_token_index(START_SYMBOL, self._source_namespace)
@@ -88,8 +87,6 @@ class CopyNet(Model):
         self._oov_index = self.vocab.get_token_index(self.vocab._oov_token, self._target_namespace)  # pylint: disable=protected-access
         self._copy_index = self.vocab.get_token_index(copy_token, self._target_namespace)
         if self._copy_index == self._oov_index:
-            for tok in vocab.get_token_to_index_vocabulary(self._target_namespace):
-                print(tok)
             raise ConfigurationError(f"Special copy token {copy_token} missing from target vocab namespace. "
                                      f"You can ensure this token is added to the target namespace with the "
                                      f"vocabulary parameter 'tokens_to_add'.")
@@ -218,8 +215,11 @@ class CopyNet(Model):
 
     def _decoder_step(self,
                       last_predictions: torch.Tensor,
-                      selective_weights: torch.Tensor,
-                      state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+                      state: Dict[str, torch.Tensor],
+                      selective_weights: torch.Tensor = None) -> Dict[str, torch.Tensor]:
+        if selective_weights is None:
+            selective_weights = state["selective_weights"]
+
         # shape: (batch_size, max_input_sequence_length, encoder_output_dim)
         encoder_outputs_mask = state["source_mask"].float()
 
@@ -386,7 +386,7 @@ class CopyNet(Model):
                 input_choices = input_choices * (1 - copied) + copy_input_choices * copied
 
             # Update the decoder state by taking a step through the RNN.
-            state = self._decoder_step(input_choices, selective_weights, state)
+            state = self._decoder_step(input_choices, state, selective_weights=selective_weights)
 
             # Get generation scores for each token in the target vocab.
             # shape: (batch_size, target_vocab_size)
@@ -433,9 +433,70 @@ class CopyNet(Model):
 
         return {"loss": loss}
 
-    def _forward_beam_search(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        # pylint: disable=no-self-use,unused-argument
-        return {}
+    def _forward_beam_search(self, initial_state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        batch_size, source_length = initial_state["source_mask"].size()
+        target_vocab_size = self.vocab.get_vocab_size(self._target_namespace)
+
+        # shape: (batch_size,)
+        start_predictions = \
+            initial_state["source_mask"].new_full((batch_size,), fill_value=self._start_index)
+
+        # shape: (batch_size, trimmed_source_length)
+        initial_state["selective_weights"] = \
+            initial_state["decoder_hidden"].new_zeros(batch_size, source_length - 2)
+
+        def take_step(last_predictions: torch.Tensor,
+                      state: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+            # NOTE: `group_size` != `batch_size`. In fact, `group_size` = `batch_size * beam_size`.
+            # `last_predictions` has shape `(group_size, trimmed_source_length)`.
+            group_size = last_predictions.size()
+
+            # Get mask tensor indicating which predictions were copied.
+            # shape: (group_size,)
+            copied = (last_predictions >= target_vocab_size).long()
+
+            # We use this to fill in the copy index when the previous input was copied.
+            # shape: (group_size,)
+            copy_input_choices = copied.new_full((group_size,), fill_value=self._copy_index)
+
+            # So if the last prediction was in the target vocab or OOV but not copied,
+            # we use that as input, otherwise we use the COPY token.
+            # shape: (group_size,)
+            input_choices = last_predictions * (1 - copied) + copy_input_choices * copied
+
+            # Update the decoder state by taking a step through the RNN.
+            state = self._decoder_step(input_choices, state)
+
+            # Get the un-normalized generation scores for each token in the target vocab.
+            # shape: (group_size, target_vocab_size)
+            generation_scores = self._get_generation_scores(state)
+
+            # shape: (group_size, trimmed_source_length)
+            copy_mask = source_mask[:, 1:-1].float()
+
+        # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
+        # shape (log_probabilities): (batch_size, beam_size)
+        all_top_k_predictions, log_probabilities = self._beam_search.search(
+                start_predictions, initial_state, take_step)
+
+        output_dict = {
+                "predicted_log_probs": log_probabilities,
+                "predictions": all_top_k_predictions,
+        }
+
+        return output_dict
+
+    @overrides
+    def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Finalize predictions.
+
+        After a beam search, the predicted indices correspond to tokens in the target vocabulary
+        OR tokens in source sentence. Here we gather the actual tokens corresponding to
+        the indices.
+        """
+        # TODO
+        return output_dict
 
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:

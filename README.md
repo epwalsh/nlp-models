@@ -24,10 +24,12 @@ After AllenNLP is installed, you can define your own experiments with an AllenNL
 
 ## Datasets
 
+- Greetings: A simple made-up dataset of greetings (the source sentences) and replies (the target sentences). The greetings are things like "Hi, my name is Jon Snow" and the replies are in the format "Nice to meet you, Jon Snow!". This is completely artificial and is just meant to show the usefullness of the copy mechanism in CopyNet.
 - [NL2Bash](http://arxiv.org/abs/1802.08979): A challenging dataset that consists of bash one-liners along with corresponding expert descriptions. The goal is to translate the natural language descriptions into the bash commands.
 
 ## Experiments
 
+- Greetings dataset with CopyNet: run `make experiments/greetings/copynet.json` to train.
 - (WIP) [NL2Bash with CopyNet](./experiments/nl2bash/copynet.json): run `make experiments/nl2bash/copynet.json` to train.
 
 ## TODO
