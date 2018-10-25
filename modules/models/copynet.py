@@ -287,24 +287,39 @@ class CopyNet(Model):
         """
         _, target_size = generation_scores.size()
 
+        # The point of this mask is to just mask out all source token scores
+        # that just represent padding. We apply the mask to the concatenation
+        # of the generation scores and the copy scores to normalize the scores
+        # correctly during the softmax.
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         mask = torch.cat((generation_scores.new_full(generation_scores.size(), 1.0), copy_mask), dim=-1)
 
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         all_scores = torch.cat((generation_scores, copy_scores), dim=-1)
 
+        # Normalize generation and copy scores.
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         probs = util.masked_softmax(all_scores, mask)
 
+        # Calculate the probability (normalized copy score) for each token in the source sentence
+        # that matches the current target token. We end up summing the scores
+        # for each occurence of a matching token to get the actual score, but we also
+        # need the un-summed probabilities to create the selective read state
+        # during the next time step.
         # shape: (batch_size, trimmed_source_length)
         selective_weights = probs[:, target_size:] * copy_indicators.float()
 
+        # This mask ensures that item in the batch has a non-zero generation score for this timestep
+        # only when the gold target token is not OOV or their are no matching tokens
+        # in the source sentence.
         # shape: (batch_size,)
         gen_mask = ((target_tokens != self._oov_index) | (copy_indicators.sum(-1) == 0)).float()
 
+        # Now we get the generation score for the gold target token.
         # shape: (batch_size,)
         step_prob = probs.gather(1, target_tokens.unsqueeze(1)).squeeze(-1) * gen_mask
 
+        # ... and add the copy score.
         # shape: (batch_size,)
         step_prob = step_prob + selective_weights.sum(-1)
 
@@ -317,6 +332,9 @@ class CopyNet(Model):
                       target_tokens: Dict[str, torch.LongTensor],
                       copy_indicators: torch.Tensor,
                       state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """
+        Calculate the loss against gold targets.
+        """
         # shape: (batch_size, max_input_sequence_length)
         source_mask = state["source_mask"]
 
