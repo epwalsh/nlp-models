@@ -127,9 +127,14 @@ class CopyNetDatasetReader(DatasetReader):
         source_duplicates_array = self._create_source_duplicates_array(tokenized_source)
         source_duplicates_field = ArrayField(source_duplicates_array)
 
+        # For each token in the source sentence, we keep track of the matching token
+        # in the target sentence (which will be the OOV symbol if there is no match).
+        target_pointer_field = CopyMapField(tokenized_source[1:-1], self._target_namespace)
+
         fields_dict = {
                 "source_tokens": source_field,
                 "source_duplicates": source_duplicates_field,
+                "target_pointers": target_pointer_field,
         }
 
         if target_string is not None:
@@ -146,12 +151,7 @@ class CopyNetDatasetReader(DatasetReader):
             # shape: (target_length, source_length)
             copy_indicator_field = ArrayField(copy_indicator_array)
 
-            # For each token in the source sentence, we keep track of the matching token
-            # in the target sentence (which will be the OOV symbol if there is no match).
-            target_pointer_field = CopyMapField(tokenized_source[1:-1], self._target_namespace)
-
             fields_dict["target_tokens"] = target_field
             fields_dict["copy_indicators"] = copy_indicator_field
-            fields_dict["target_pointers"] = target_pointer_field
 
         return Instance(fields_dict)

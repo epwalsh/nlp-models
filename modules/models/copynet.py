@@ -91,6 +91,8 @@ class CopyNet(Model):
                                      f"You can ensure this token is added to the target namespace with the "
                                      f"vocabulary parameter 'tokens_to_add'.")
 
+        self._target_vocab_size = self.vocab.get_vocab_size(self._target_namespace)
+
         # Encoding modules.
         self._source_embedder = source_embedder
         self._encoder = encoder
@@ -135,6 +137,8 @@ class CopyNet(Model):
     @overrides
     def forward(self,  # type: ignore
                 source_tokens: Dict[str, torch.LongTensor],
+                source_duplicates: torch.Tensor,
+                target_pointers: torch.Tensor,
                 target_tokens: Dict[str, torch.LongTensor] = None,
                 copy_indicators: torch.Tensor = None) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
@@ -143,9 +147,15 @@ class CopyNet(Model):
 
         Parameters
         ----------
-        source_tokens : ``Dict[str, torch.LongTensor]``
+        source_tokens : ``Dict[str, torch.LongTensor]``, required
             The output of `TextField.as_array()` applied on the source `TextField`. This will be
             passed through a `TextFieldEmbedder` and then through an encoder.
+        source_duplicates : ``torch.Tensor``, required
+            Tensor containing indicators of which source tokens match each other.
+            Has shape: `(batch_size, trimmed_source_length, trimmed_source_length)`.
+        target_pointers : ``torch.Tensor``, required
+            Tensor containing vocab index of each source token with respect to the
+            target vocab namespace. Shape: `(batch_size, trimmed_source_length)`.
         target_tokens : ``Dict[str, torch.LongTensor]``, optional (default = None)
             Output of `Textfield.as_array()` applied on target `TextField`. We assume that the
             target tokens are also represented as a `TextField`.
@@ -160,7 +170,7 @@ class CopyNet(Model):
         -------
         Dict[str, torch.Tensor]
         """
-        state = self._init_encoded_state(source_tokens)
+        state = self._init_encoded_state(source_tokens, source_duplicates, target_pointers)
 
         if target_tokens:
             output_dict = self._forward_loop(target_tokens, copy_indicators, state)
@@ -176,7 +186,10 @@ class CopyNet(Model):
 
         return output_dict
 
-    def _init_encoded_state(self, source_tokens: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def _init_encoded_state(self,
+                            source_tokens: Dict[str, torch.Tensor],
+                            source_duplicates: torch.Tensor,
+                            target_pointers: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
         Initialize the encoded state to be passed to the first decoding time step.
         """
@@ -208,18 +221,17 @@ class CopyNet(Model):
                 "source_mask": source_mask,
                 "encoder_outputs": encoder_outputs,
                 "decoder_hidden": decoder_hidden,
-                "decoder_context": decoder_context
+                "decoder_context": decoder_context,
+                "source_duplicates": source_duplicates,
+                "target_pointers": target_pointers,
         }
 
         return state
 
     def _decoder_step(self,
                       last_predictions: torch.Tensor,
-                      state: Dict[str, torch.Tensor],
-                      selective_weights: torch.Tensor = None) -> Dict[str, torch.Tensor]:
-        if selective_weights is None:
-            selective_weights = state["selective_weights"]
-
+                      selective_weights: torch.Tensor,
+                      state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # shape: (batch_size, max_input_sequence_length, encoder_output_dim)
         encoder_outputs_mask = state["source_mask"].float()
 
@@ -318,7 +330,7 @@ class CopyNet(Model):
         selective_weights = probs[:, target_size:] * copy_indicators.float()
 
         # This mask ensures that item in the batch has a non-zero generation score for this timestep
-        # only when the gold target token is not OOV or their are no matching tokens
+        # only when the gold target token is not OOV or there are no matching tokens
         # in the source sentence.
         # shape: (batch_size,)
         gen_mask = ((target_tokens != self._oov_index) | (copy_indicators.sum(-1) == 0)).float()
@@ -386,7 +398,7 @@ class CopyNet(Model):
                 input_choices = input_choices * (1 - copied) + copy_input_choices * copied
 
             # Update the decoder state by taking a step through the RNN.
-            state = self._decoder_step(input_choices, state, selective_weights=selective_weights)
+            state = self._decoder_step(input_choices, selective_weights, state)
 
             # Get generation scores for each token in the target vocab.
             # shape: (batch_size, target_vocab_size)
@@ -433,51 +445,127 @@ class CopyNet(Model):
 
         return {"loss": loss}
 
-    def _forward_beam_search(self, initial_state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        batch_size, source_length = initial_state["source_mask"].size()
-        target_vocab_size = self.vocab.get_vocab_size(self._target_namespace)
+    def _get_selective_weights(self,
+                               last_predictions: torch.LongTensor,
+                               copied: torch.LongTensor,
+                               state: Dict[str, torch.Tensor]) -> torch.Tensor:
+        # shape: (group_size, trimmed_source_length)
+        copy_probs = state["copy_probs"]
+
+        # shape: (group_size, trimmed_source_length,  trimmed_source_length)
+        source_duplicates = state["source_duplicates"]
+
+        # shape: (group_size,)
+        adjusted_predictions = (last_predictions - self._target_vocab_size) * copied
+
+        # Expand adjusted_predictions to match source_duplicates shape.
+        # shape: (group_size, trimmed_source_length, trimmed_source_length)
+        adjusted_predictions = adjusted_predictions.unsqueeze(-1)\
+            .unsqueeze(-1)\
+            .expand(source_duplicates.size())
+
+        # The mask will contain indicators for source tokens that were copied
+        # during the last timestep.
+        # shape: (group_size, trimmed_source_length)
+        mask = source_duplicates.gather(-1, adjusted_predictions)[:, :, 0]
+        mask = mask * copied.unsqueeze(-1).expand(mask.size())
+
+        return copy_probs * mask.float()
+
+    def take_search_step(self,
+                         last_predictions: torch.Tensor,
+                         state: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """
+        Take step during beam search.
+
+        Parameters
+        ----------
+        last_predictions : ``torch.Tensor``
+            Shape: `(group_size,)`
+
+        state : ``Dict[str, torch.Tensor]``
+            Contains all state tensors necessary to produce generation and copy scores
+            for next step.
+
+        Notes
+        -----
+        `group_size` != `batch_size`. In fact, `group_size` = `batch_size * beam_size`.
+        """
+        group_size, _ = state["source_mask"].size()
+
+        # Get mask tensor indicating which predictions were copied.
+        # shape: (group_size,)
+        copied = (last_predictions >= self._target_vocab_size).long()
+
+        # Set selective_weights to probs assigned to copied source tokens from
+        # last timestep.
+        # (group_size,  trimmed_source_length)
+        selective_weights = self._get_selective_weights(copied, state)
+
+        # We use this to fill in the copy index when the previous input was copied.
+        # shape: (group_size,)
+        copy_input_choices = copied.new_full((group_size,), fill_value=self._copy_index)
+
+        # So if the last prediction was in the target vocab or OOV but not copied,
+        # we use that as input, otherwise we use the COPY token.
+        # shape: (group_size,)
+        input_choices = last_predictions * (1 - copied) + copy_input_choices * copied
+
+        # Update the decoder state by taking a step through the RNN.
+        state = self._decoder_step(input_choices, selective_weights, state)
+
+        # Get the un-normalized generation scores for each token in the target vocab.
+        # shape: (group_size, target_vocab_size)
+        generation_scores = self._get_generation_scores(state)
+
+        # Get the un-normalized copy scores for each token in the source sentence,
+        # excluding the start and end tokens.
+        # shape: (group_size, trimmed_source_length)
+        copy_scores = self._get_copy_scores(state)
+
+        # Concat un-normalized generation and copy scores.
+        # shape: (batch_size, target_vocab_size + trimmed_source_length)
+        all_scores = torch.cat((generation_scores, copy_scores), dim=-1)
+
+        # shape: (group_size, trimmed_source_length)
+        copy_mask = source_mask[:, 1:-1].float()
+
+        # shape: (batch_size, target_vocab_size + trimmed_source_length)
+        mask = torch.cat((generation_scores.new_full(generation_scores.size(), 1.0), copy_mask), dim=-1)
+
+        # Normalize generation and copy scores.
+        # shape: (batch_size, target_vocab_size + trimmed_source_length)
+        probs = util.masked_softmax(all_scores, mask)
+
+        # Update copy_probs needed for getting the `selective_weights` at the next timestep.
+        state["copy_probs"] = probs[:, self._target_vocab_size:]
+
+        # The final (normalized) score for each token in the target vocab is sum of generation
+        # and copy scores. So here we go through each token in the source sentence
+        # and add it's copy score to the generation score of the matching target
+        # token if there is one.
+        # TODO: use `target_pointers` for this.
+
+        # We now zero-out copy scores that we added to the generation scores
+        # above so that we don't double-count them.
+        # TODO
+
+        # Lastly, we have to combine copy scores for duplicate source tokens so that
+        # we can find the over all most likely source token.
+        # TODO: need `source_duplicates` for this.
+
+        return probs, state
+
+    def _forward_beam_search(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        batch_size, _ = state["source_mask"].size()
 
         # shape: (batch_size,)
-        start_predictions = \
-            initial_state["source_mask"].new_full((batch_size,), fill_value=self._start_index)
-
-        # shape: (batch_size, trimmed_source_length)
-        initial_state["selective_weights"] = \
-            initial_state["decoder_hidden"].new_zeros(batch_size, source_length - 2)
-
-        def take_step(last_predictions: torch.Tensor,
-                      state: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-            # NOTE: `group_size` != `batch_size`. In fact, `group_size` = `batch_size * beam_size`.
-            # `last_predictions` has shape `(group_size, trimmed_source_length)`.
-            group_size = last_predictions.size()
-
-            # Get mask tensor indicating which predictions were copied.
-            # shape: (group_size,)
-            copied = (last_predictions >= target_vocab_size).long()
-
-            # We use this to fill in the copy index when the previous input was copied.
-            # shape: (group_size,)
-            copy_input_choices = copied.new_full((group_size,), fill_value=self._copy_index)
-
-            # So if the last prediction was in the target vocab or OOV but not copied,
-            # we use that as input, otherwise we use the COPY token.
-            # shape: (group_size,)
-            input_choices = last_predictions * (1 - copied) + copy_input_choices * copied
-
-            # Update the decoder state by taking a step through the RNN.
-            state = self._decoder_step(input_choices, state)
-
-            # Get the un-normalized generation scores for each token in the target vocab.
-            # shape: (group_size, target_vocab_size)
-            generation_scores = self._get_generation_scores(state)
-
-            # shape: (group_size, trimmed_source_length)
-            copy_mask = source_mask[:, 1:-1].float()
+        start_predictions = state["source_mask"].new_full((batch_size,), fill_value=self._start_index)
 
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
         all_top_k_predictions, log_probabilities = self._beam_search.search(
-                start_predictions, initial_state, take_step)
+                start_predictions, state, self.take_search_step)
 
         output_dict = {
                 "predicted_log_probs": log_probabilities,
