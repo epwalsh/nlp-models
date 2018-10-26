@@ -2,23 +2,36 @@
 
 import numpy as np
 
+from allennlp.common import Params
 from allennlp.common.testing import AllenNlpTestCase
 from allennlp.common.util import ensure_list
+from allennlp.data import DatasetReader
 from allennlp.data.tokenizers import Token
+from allennlp.data.vocabulary import Vocabulary, DEFAULT_OOV_TOKEN
 
-from modules.data.dataset_readers import CopyNetDatasetReader
+from modules.data.dataset_readers import CopyNetDatasetReader  # pylint: disable=unused-import
 
 
 class TestCopyNetReader(AllenNlpTestCase):
 
     def setUp(self):
         super(TestCopyNetReader, self).setUp()
-        self.reader = CopyNetDatasetReader()
+        params = Params.from_file("modules/tests/fixtures/copynet/experiment.json")
+        self.reader = DatasetReader.from_params(params["dataset_reader"])
         instances = self.reader.read("modules/tests/fixtures/copynet/copyover.tsv")
         self.instances = ensure_list(instances)
+        self.vocab = Vocabulary.from_params(params=params["vocabulary"], instances=instances)
+
+    def test_vocab_namespaces(self):
+        assert self.vocab.get_vocab_size("target_tokens") > 5
+
+    def test_instances(self):
+        assert len(self.instances) == 2
+        assert set(self.instances[0].fields.keys()) == set(("source_tokens", "source_duplicates",
+                                                            "target_tokens", "copy_indicators",
+                                                            "target_pointers"))
 
     def test_tokens(self):
-        assert len(self.instances) == 2
         fields = self.instances[0].fields
         assert [t.text for t in fields["source_tokens"].tokens] == \
             ["@start@", "these", "tokens", "should", "be", "copied", "over", ":", "hello", "world", "@end@"]
@@ -42,6 +55,22 @@ class TestCopyNetReader(AllenNlpTestCase):
                           [0, 0, 0, 0, 1, 0, 0, 0, 0],  # copied
                           [0, 0, 0, 0, 0, 0, 0, 0, 0]]) # @END@
         np.testing.assert_equal(copy_indicators.array, check)
+
+    def test_target_pointers(self):
+        target_pointers_field = self.instances[0].fields["target_pointers"]
+        target_pointers_field.index(self.vocab)
+        tensor = target_pointers_field.as_tensor(target_pointers_field.get_padding_lengths())
+        check = np.array([self.vocab.get_token_index("these", "target_tokens"),
+                          self.vocab.get_token_index("tokens", "target_tokens"),
+                          self.vocab.get_token_index("should", "target_tokens"),
+                          self.vocab.get_token_index("be", "target_tokens"),
+                          self.vocab.get_token_index("copied", "target_tokens"),
+                          self.vocab.get_token_index("over", "target_tokens"),
+                          self.vocab.get_token_index(":", "target_tokens"),
+                          self.vocab.get_token_index("hello", "target_tokens"),
+                          self.vocab.get_token_index("world", "target_tokens")])
+        np.testing.assert_equal(tensor.numpy(), check)
+        assert tensor[1].item() != self.vocab.get_token_index(DEFAULT_OOV_TOKEN, "target_tokens")
 
     def test_source_duplicates_array(self):
         tokens = ["@START@", "a", "cat", "is", "a", "cat", "@END@"]

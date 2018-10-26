@@ -1,5 +1,6 @@
 {
   "dataset_reader": {
+    "target_namespace": "target_tokens",
     "type": "copynet",
     "source_token_indexers": {
       "tokens": {

@@ -33,3 +33,7 @@ class CopyMapField(Field[torch.Tensor]):
         padded_tokens = pad_sequence_to_length(self._mapping_array, desired_length)
         tensor = torch.LongTensor(padded_tokens)
         return tensor
+
+    @overrides
+    def empty_field(self) -> 'CopyMapField':
+        return CopyMapField([], self._target_namespace)

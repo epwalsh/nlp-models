@@ -9,7 +9,7 @@ class TestNL2BashReader(AllenNlpTestCase):
 
     def setUp(self):
         super(TestNL2BashReader, self).setUp()
-        self.reader = NL2BashDatasetReader()
+        self.reader = NL2BashDatasetReader("target_tokens")
         instances = self.reader.read("modules/tests/fixtures/nl2bash/train.tsv")
         self.instances = ensure_list(instances)
 

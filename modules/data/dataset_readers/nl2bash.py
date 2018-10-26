@@ -95,6 +95,7 @@ class NL2BashDatasetReader(CopyNetDatasetReader):
     prompt_finder = re.compile(r"^(\$|#)\s?")
 
     def __init__(self,
+                 target_namespace: str,
                  source_tokenizer: Tokenizer = None,
                  target_tokenizer: Tokenizer = None,
                  source_token_indexers: Dict[str, TokenIndexer] = None,
@@ -102,7 +103,8 @@ class NL2BashDatasetReader(CopyNetDatasetReader):
                  lazy: bool = False) -> None:
         source_tokenizer = source_tokenizer or WordTokenizer(word_splitter=NL2BashWordSplitter())
         target_tokenizer = target_tokenizer or source_tokenizer
-        super().__init__(source_tokenizer=source_tokenizer,
+        super().__init__(target_namespace,
+                         source_tokenizer=source_tokenizer,
                          target_tokenizer=target_tokenizer,
                          source_token_indexers=source_token_indexers,
                          target_token_indexers=target_token_indexers,

@@ -1,5 +1,6 @@
 {
   "dataset_reader": {
+    "target_namespace": "target_tokens",
     "type": "nl2bash",
     "source_token_indexers": {
       "tokens": {
