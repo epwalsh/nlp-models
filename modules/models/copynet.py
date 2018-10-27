@@ -455,8 +455,15 @@ class CopyNet(Model):
         # shape: (group_size, trimmed_source_length,  trimmed_source_length)
         source_duplicates = state["source_duplicates"]
 
+        # Adjust predictions relative to start of source tokens. This makes sense
+        # because predictions for copied tokens are given by the index of the copied
+        # token in the source sentence, offset by the size of the target vocabulary.
         # shape: (group_size,)
-        adjusted_predictions = (last_predictions - self._target_vocab_size) * copied
+        adjusted_predictions = last_predictions - self._target_vocab_size
+
+        # The adjusted indices for items that were not copied will be negative numbers,
+        # and therefore invalid. So we zero them out.
+        adjusted_predictions = adjusted_predictions * copied
 
         # Expand adjusted_predictions to match source_duplicates shape.
         # shape: (group_size, trimmed_source_length, trimmed_source_length)
@@ -468,6 +475,9 @@ class CopyNet(Model):
         # during the last timestep.
         # shape: (group_size, trimmed_source_length)
         mask = source_duplicates.gather(-1, adjusted_predictions)[:, :, 0]
+
+        # Since we zero'd-out indices for predictions that were not copied,
+        # we need to zero out all entries of this mask corresponding to those predictions.
         mask = mask * copied.unsqueeze(-1).expand(mask.size())
 
         return copy_probs * mask.float()
@@ -491,7 +501,8 @@ class CopyNet(Model):
         -----
         `group_size` != `batch_size`. In fact, `group_size` = `batch_size * beam_size`.
         """
-        group_size, _ = state["source_mask"].size()
+        group_size, source_length = state["source_mask"].size()
+        trimmed_source_length = source_length - 2
 
         # Get mask tensor indicating which predictions were copied.
         # shape: (group_size,)
@@ -500,7 +511,7 @@ class CopyNet(Model):
         # Set selective_weights to probs assigned to copied source tokens from
         # last timestep.
         # (group_size,  trimmed_source_length)
-        selective_weights = self._get_selective_weights(copied, state)
+        selective_weights = self._get_selective_weights(last_predictions, copied, state)
 
         # We use this to fill in the copy index when the previous input was copied.
         # shape: (group_size,)
@@ -528,7 +539,7 @@ class CopyNet(Model):
         all_scores = torch.cat((generation_scores, copy_scores), dim=-1)
 
         # shape: (group_size, trimmed_source_length)
-        copy_mask = source_mask[:, 1:-1].float()
+        copy_mask = state["source_mask"][:, 1:-1].float()
 
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         mask = torch.cat((generation_scores.new_full(generation_scores.size(), 1.0), copy_mask), dim=-1)
@@ -537,24 +548,46 @@ class CopyNet(Model):
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         probs = util.masked_softmax(all_scores, mask)
 
+        # shape: (group_size, target_vocab_size), (group_size, trimmed_source_length)
+        generation_probs, copy_probs = probs.split([self._target_vocab_size, trimmed_source_length], dim=-1)
+
         # Update copy_probs needed for getting the `selective_weights` at the next timestep.
-        state["copy_probs"] = probs[:, self._target_vocab_size:]
+        state["copy_probs"] = copy_probs
 
-        # The final (normalized) score for each token in the target vocab is sum of generation
-        # and copy scores. So here we go through each token in the source sentence
-        # and add it's copy score to the generation score of the matching target
-        # token if there is one.
-        # TODO: use `target_pointers` for this.
+        modified_probs_list: List[torch.Tensor] = []
+        for i in range(trimmed_source_length):
+            # The final (normalized) score for each token in the target vocab is sum of generation
+            # and copy scores. So here we the copy score of each source token to the generation
+            # score of the matching target token if there is one.
+            # shape: (group_size,)
+            copy_probs_slice = copy_probs[:, i]
 
-        # We now zero-out copy scores that we added to the generation scores
-        # above so that we don't double-count them.
-        # TODO
+            # shape: (group_size,)
+            target_pointers_slice = state["target_pointers"][:, i]
 
-        # Lastly, we have to combine copy scores for duplicate source tokens so that
-        # we can find the over all most likely source token.
-        # TODO: need `source_duplicates` for this.
+            # Zero-out probs assigned to OOV target tokens.
+            slice_mask = (target_pointers_slice != self._oov_index).float()
+            copy_probs_to_add = copy_probs_slice * slice_mask
 
-        return probs, state
+            # Add the masked copy probs to corresponding generation probs.
+            generation_probs.scatter_add_(
+                    -1, target_pointers_slice.unsqueeze(-1), copy_probs_to_add.unsqueeze(-1))
+
+            # We now zero-out copy scores that we added to the generation scores
+            # above so that we don't double-count them.
+            # shape: (group_size,)
+            left_over_copy_probs = copy_probs_slice * (1.0 - slice_mask)
+
+            # Lastly, we have to combine copy scores for duplicate source tokens so that
+            # we can find the over all most likely source token.
+            # TODO: need `source_duplicates` for this.
+
+        modified_probs_list.insert(0, generation_probs)
+
+        # shape: (group_size, target_vocab_size + trimmed_source_length)
+        modified_probs = torch.cat(modified_probs_list, dim=-1)
+
+        return modified_probs, state
 
     def _forward_beam_search(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         batch_size, _ = state["source_mask"].size()
