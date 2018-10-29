@@ -475,12 +475,13 @@ class CopyNet(Model):
         # during the last timestep.
         # shape: (group_size, trimmed_source_length)
         mask = source_duplicates.gather(-1, adjusted_predictions)[:, :, 0]
+        mask = mask.float()
 
         # Since we zero'd-out indices for predictions that were not copied,
         # we need to zero out all entries of this mask corresponding to those predictions.
-        mask = mask * copied.unsqueeze(-1).expand(mask.size())
+        mask = mask * copied.unsqueeze(-1).expand(mask.size()).float()
 
-        return copy_probs * mask.float()
+        return copy_probs * mask
 
     def take_search_step(self,
                          last_predictions: torch.Tensor,
@@ -621,14 +622,14 @@ class CopyNet(Model):
             if i > 0:
                 # Zero-out copy probs that we have already accounted for.
                 # shape: (group_size, i)
-                source_previous_occurences = state["source_duplicates"][:, :, 0:i]
+                source_previous_occurences = state["source_duplicates"][:, i, 0:i]
                 # shape: (group_size,)
                 duplicate_mask = (source_previous_occurences.sum(dim=-1) > 0).float()
                 left_over_copy_probs = left_over_copy_probs * duplicate_mask
             if i < (trimmed_source_length - 1):
                 # Sum copy scores from future occurences of source token.
                 # shape: (group_size, trimmed_source_length - i)
-                source_future_occurences = state["source_duplicates"][:, :, (i+1):]
+                source_future_occurences = state["source_duplicates"][:, i, (i+1):]
                 # shape: (group_size, trimmed_source_length - i)
                 future_copy_probs = copy_probs[:, (i+1):] * source_future_occurences
                 # shape: (group_size,)
@@ -643,7 +644,11 @@ class CopyNet(Model):
         return modified_probs, state
 
     def _forward_beam_search(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        batch_size, _ = state["source_mask"].size()
+        batch_size, source_length = state["source_mask"].size()
+        trimmed_source_length = source_length - 2
+
+        # Initialize the copy scores to zero.
+        state["copy_probs"] = state["decoder_hidden"].new_zeros((batch_size, trimmed_source_length))
 
         # shape: (batch_size,)
         start_predictions = state["source_mask"].new_full((batch_size,), fill_value=self._start_index)
