@@ -481,7 +481,13 @@ class CopyNet(Model):
         # we need to zero out all entries of this mask corresponding to those predictions.
         mask = mask * copied.unsqueeze(-1).expand(mask.size()).float()
 
-        return copy_probs * mask
+        # shape: (group_size, trimmed_source_length)
+        raw_weights = copy_probs * mask
+
+        # shape: (group_size, trimmed_source_length)
+        normalized_weights = raw_weights / (raw_weights.sum(dim=-1, keepdim=True) + 1e-13)
+
+        return normalized_weights
 
     def take_search_step(self,
                          last_predictions: torch.Tensor,
@@ -535,14 +541,30 @@ class CopyNet(Model):
         group_size, source_length = state["source_mask"].size()
         trimmed_source_length = source_length - 2
 
+        # (group_size,)
+        only_copied = (last_predictions >= self._target_vocab_size).long()
+
+        # TODO: clean this up
+
+        # shape: (group_size, trimmed_source_length)
+        expanded_last_predictions = last_predictions.unsqueeze(-1).expand(group_size, trimmed_source_length)
+        # shape: (group_size, trimmed_source_length)
+        source_matches = (state["target_pointers"] == expanded_last_predictions)
+        # shape: (group_size,)
+        _, first_match = source_matches.max(dim=-1)
+        # shape: (group_size,)
+        index_offset = (first_match + 1) * (last_predictions != self._oov_index).long()
+        # shape: (group_size,)
+        offset_last_predictions = last_predictions + index_offset
+
         # Get mask tensor indicating which predictions were copied.
         # shape: (group_size,)
-        copied = (last_predictions >= self._target_vocab_size).long()
+        copied = (offset_last_predictions >= self._target_vocab_size).long()
 
         # Set selective_weights to probs assigned to copied source tokens from
         # last timestep.
         # (group_size,  trimmed_source_length)
-        selective_weights = self._get_selective_weights(last_predictions, copied, state)
+        selective_weights = self._get_selective_weights(offset_last_predictions, copied, state)
 
         # We use this to fill in the copy index when the previous input was copied.
         # shape: (group_size,)
@@ -551,7 +573,7 @@ class CopyNet(Model):
         # So if the last prediction was in the target vocab or OOV but not copied,
         # we use that as input, otherwise we use the COPY token.
         # shape: (group_size,)
-        input_choices = last_predictions * (1 - copied) + copy_input_choices * copied
+        input_choices = last_predictions * (1 - only_copied) + copy_input_choices * only_copied
 
         # Update the decoder state by taking a step through the RNN.
         state = self._decoder_step(input_choices, selective_weights, state)
@@ -641,7 +663,7 @@ class CopyNet(Model):
         # shape: (group_size, target_vocab_size + trimmed_source_length)
         modified_probs = torch.cat(modified_probs_list, dim=-1)
 
-        return modified_probs, state
+        return modified_probs.log(), state
 
     def _forward_beam_search(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         batch_size, source_length = state["source_mask"].size()
