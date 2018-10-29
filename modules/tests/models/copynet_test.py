@@ -105,13 +105,9 @@ class CopyNetTest(ModelTestCase):
 
         # This is what the selective_weights result should look like.
         selective_weights_check = np.stack([
-                # First instance.
-                np.exp([float("-inf"), 2.0, float("-inf")]) /
-                np.exp([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0, 2.0]).sum(),
-                np.exp([float("-inf"), float("-inf"), float("-inf")]) /
-                np.exp([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0]).sum(),
-                np.exp([2.0, float("-inf"), 3.0]) /
-                np.exp([0.1, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 2.0, 2.0, 3.0]).sum(),
+                np.array([0., 1., 0.]),
+                np.array([0., 0., 0.]),
+                np.exp([2.0, float("-inf"), 3.0]) / (np.exp(2.0) + np.exp(3.0)),
         ])
 
         ll_actual, selective_weights_actual = self.model._get_ll_contrib(generation_scores,

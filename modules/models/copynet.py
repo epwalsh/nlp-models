@@ -327,7 +327,11 @@ class CopyNet(Model):
         # need the un-summed probabilities to create the selective read state
         # during the next time step.
         # shape: (batch_size, trimmed_source_length)
-        selective_weights = probs[:, target_size:] * copy_indicators.float()
+        raw_selective_weights = probs[:, target_size:] * copy_indicators.float()
+        # shape: (batch_size,)
+        sum_selective_weights = raw_selective_weights.sum(-1)
+        # shape: (batch_size, trimmed_source_length)
+        selective_weights = raw_selective_weights / (sum_selective_weights.unsqueeze(-1) + 1e-13)
 
         # This mask ensures that item in the batch has a non-zero generation score for this timestep
         # only when the gold target token is not OOV or there are no matching tokens
@@ -341,7 +345,7 @@ class CopyNet(Model):
 
         # ... and add the copy score.
         # shape: (batch_size,)
-        step_prob = step_prob + selective_weights.sum(-1)
+        step_prob = step_prob + sum_selective_weights
 
         # shape: (batch_size,)
         step_log_likelihood = step_prob.log()
