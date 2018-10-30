@@ -65,7 +65,7 @@
       "vector_dim": 200,
       "matrix_dim": 200
     },
-    "target_embedding_dim": 10
+    "target_embedding_dim": 10,
     "beam_size": 5,
     "max_decoding_steps": 50
   },

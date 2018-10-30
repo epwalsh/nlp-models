@@ -78,7 +78,7 @@
   "trainer": {
     "optimizer": {
       "type": "sgd",
-      "lr": 0.015
+      "lr": 0.1
     },
     "learning_rate_scheduler": {
       "type": "cosine",
