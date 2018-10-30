@@ -170,14 +170,16 @@ class CopyNet(Model):
         -------
         Dict[str, torch.Tensor]
         """
-        state = self._init_encoded_state(source_tokens, source_duplicates, target_pointers)
+        state = self._encode(source_tokens, source_duplicates, target_pointers)
 
         if target_tokens:
+            state = self._init_decoder_state(state)
             output_dict = self._forward_loop(target_tokens, copy_indicators, state)
         else:
             output_dict = {}
 
         if not self.training:
+            state = self._init_decoder_state(state)
             predictions = self._forward_beam_search(state)
             output_dict.update(predictions)
             if self._metrics:
@@ -186,17 +188,35 @@ class CopyNet(Model):
 
         return output_dict
 
-    def _init_encoded_state(self,
-                            source_tokens: Dict[str, torch.Tensor],
-                            source_duplicates: torch.Tensor,
-                            target_pointers: torch.Tensor) -> Dict[str, torch.Tensor]:
+    def _init_decoder_state(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
         Initialize the encoded state to be passed to the first decoding time step.
         """
+        batch_size, _ = state["source_mask"].size()
+
+        # Initialize the decoder hidden state with the final output of the encoder,
+        # and the decoder context with zeros.
+        # shape: (batch_size, encoder_output_dim)
+        final_encoder_output = util.get_final_encoder_states(
+                state["encoder_outputs"],
+                state["source_mask"],
+                self._encoder.is_bidirectional())
+        # shape: (batch_size, decoder_output_dim)
+        state["decoder_hidden"] = final_encoder_output
+        # shape: (batch_size, decoder_output_dim)
+        state["decoder_context"] = state["encoder_outputs"].new_zeros(batch_size, self.decoder_output_dim)
+
+        return state
+
+    def _encode(self,
+                source_tokens: Dict[str, torch.Tensor],
+                source_duplicates: torch.Tensor,
+                target_pointers: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """
+        Encode source input sentences.
+        """
         # shape: (batch_size, max_input_sequence_length, encoder_input_dim)
         embedded_input = self._source_embedder(source_tokens)
-
-        batch_size, _, _ = embedded_input.size()
 
         # shape: (batch_size, max_input_sequence_length)
         source_mask = util.get_text_field_mask(source_tokens)
@@ -204,24 +224,9 @@ class CopyNet(Model):
         # shape: (batch_size, max_input_sequence_length, encoder_output_dim)
         encoder_outputs = self._encoder(embedded_input, source_mask)
 
-        # shape: (batch_size, encoder_output_dim)
-        final_encoder_output = util.get_final_encoder_states(
-                encoder_outputs,
-                source_mask,
-                self._encoder.is_bidirectional())
-
-        # Initialize the decoder hidden state with the final output of the encoder.
-        # shape: (batch_size, decoder_output_dim)
-        decoder_hidden = final_encoder_output
-
-        # shape: (batch_size, decoder_output_dim)
-        decoder_context = encoder_outputs.new_zeros(batch_size, self.decoder_output_dim)
-
         state = {
                 "source_mask": source_mask,
                 "encoder_outputs": encoder_outputs,
-                "decoder_hidden": decoder_hidden,
-                "decoder_context": decoder_context,
                 "source_duplicates": source_duplicates,
                 "target_pointers": target_pointers,
         }
@@ -341,14 +346,14 @@ class CopyNet(Model):
 
         # Now we get the generation score for the gold target token.
         # shape: (batch_size,)
-        step_prob = probs.gather(1, target_tokens.unsqueeze(1)).squeeze(-1) * gen_mask
+        step_likelihood = probs.gather(1, target_tokens.unsqueeze(1)).squeeze(-1) * gen_mask
 
         # ... and add the copy score.
         # shape: (batch_size,)
-        step_prob = step_prob + sum_selective_weights
+        step_likelihood = step_likelihood + sum_selective_weights
 
         # shape: (batch_size,)
-        step_log_likelihood = step_prob.log()
+        step_log_likelihood = step_likelihood.log()
 
         return step_log_likelihood, selective_weights
 
@@ -367,10 +372,6 @@ class CopyNet(Model):
         # The last input from the target is either padding or the end symbol.
         # Either way, we don't have to process it.
         num_decoding_steps = target_sequence_length - 1
-
-        # We initialize the target predictions with the start token.
-        # shape: (batch_size,)
-        input_choices = source_mask.new_full((batch_size,), fill_value=self._start_index)
 
         # We use this to fill in the copy index when the previous input was copied.
         # shape: (batch_size,)
@@ -645,13 +646,6 @@ class CopyNet(Model):
             # we can find the overall most likely source token. So, if this is the first
             # occurence of this particular source token, we add the probs from all other
             # occurences, otherwise we zero it out since it was already accounted for.
-            if i > 0:
-                # Zero-out copy probs that we have already accounted for.
-                # shape: (group_size, i)
-                source_previous_occurences = state["source_duplicates"][:, i, 0:i]
-                # shape: (group_size,)
-                duplicate_mask = (source_previous_occurences.sum(dim=-1) > 0).float()
-                left_over_copy_probs = left_over_copy_probs * duplicate_mask
             if i < (trimmed_source_length - 1):
                 # Sum copy scores from future occurences of source token.
                 # shape: (group_size, trimmed_source_length - i)
@@ -661,6 +655,13 @@ class CopyNet(Model):
                 # shape: (group_size,)
                 summed_future_copy_probs = future_copy_probs.sum(dim=-1)
                 left_over_copy_probs = left_over_copy_probs + summed_future_copy_probs
+            if i > 0:
+                # Zero-out copy probs that we have already accounted for.
+                # shape: (group_size, i)
+                source_previous_occurences = state["source_duplicates"][:, i, 0:i]
+                # shape: (group_size,)
+                duplicate_mask = (source_previous_occurences.sum(dim=-1) == 0).float()
+                left_over_copy_probs = left_over_copy_probs * duplicate_mask
 
             modified_probs_list.append(left_over_copy_probs.unsqueeze(-1))
 
