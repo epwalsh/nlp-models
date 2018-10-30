@@ -557,7 +557,7 @@ class CopyNet(Model):
         # shape: (group_size,)
         _, first_match = source_matches.max(dim=-1)
         # shape: (group_size,)
-        index_offset = (first_match + 1) * (last_predictions != self._oov_index).long()
+        index_offset = (first_match + 1) * (last_predictions != self._oov_index).long() * (1 - only_copied)
         # shape: (group_size,)
         offset_last_predictions = last_predictions + index_offset
 

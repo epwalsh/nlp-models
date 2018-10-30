@@ -1,3 +1,4 @@
+debug         = 0
 test          = modules
 COVERAGE     := $(addprefix --cov=, $(test))
 PYTHONPATH    = allennlp
@@ -12,7 +13,11 @@ EXPERIMENTS  := $(wildcard $(EXPERIMENTDIR)/**/*.json)
 
 .PHONY : train
 train :
+ifeq ($(debug),0)
 	./scripts/train.sh
+else
+	CUDA_LAUNCH_BLOCKING=1 ./scripts/train.sh
+endif
 
 # Need this to force targets to build, even when the target file exists.
 .PHONY : phony-target
