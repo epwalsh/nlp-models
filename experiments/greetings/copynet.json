@@ -78,7 +78,13 @@
   "trainer": {
     "optimizer": {
       "type": "sgd",
-      "lr": 0.01
+      "lr": 0.015
+    },
+    "learning_rate_scheduler": {
+      "type": "cosine",
+      "t_initial": 5,
+      "t_mul": 1.5,
+      "eta_mul": 0.9
     },
     "num_epochs": 80,
     "cuda_device": 0,
