@@ -121,3 +121,56 @@ class CopyNetTest(ModelTestCase):
 
         np.testing.assert_almost_equal(selective_weights_actual.data.numpy(),
                                        selective_weights_check, decimal=6)
+
+    def test_get_input_and_selective_weights(self):
+        target_vocab_size = self.model._target_vocab_size
+        oov_index = self.model._oov_index
+        copy_index = self.model._copy_index
+
+        # shape: (group_size,)
+        last_predictions = torch.tensor([5,                       # only generated.
+                                         6,                       # copied AND generated.
+                                         target_vocab_size + 1])  # only generated.
+        # shape: (group_size, trimmed_source_length)
+        target_pointers = torch.tensor([[6, oov_index, oov_index],
+                                        [6, oov_index, 6],
+                                        [5, oov_index, oov_index]])
+        # shape: (group_size, trimmed_source_length, trimmed_source_length)
+        source_duplicates = torch.tensor([
+                [[1, 0, 0],  # no duplicates.
+                 [0, 1, 0],
+                 [0, 0, 1]],
+                [[1, 0, 1],  # first and last source tokens match.
+                 [0, 1, 0],
+                 [1, 0, 1]],
+                [[1, 0, 0],  # middle and last source tokens match.
+                 [0, 1, 1],
+                 [0, 1, 1]],
+        ])
+        # shape: (group_size, trimmed_source_length)
+        copy_probs = torch.tensor([[0.1, 0.1, 0.1],
+                                   [0.1, 0.1, 0.1],
+                                   [0.1, 0.1, 0.1]])
+
+        state = {
+                "target_pointers": target_pointers,
+                "source_duplicates": source_duplicates,
+                "copy_probs": copy_probs,
+        }
+
+        input_choices, selective_weights = \
+            self.model._get_input_and_selective_weights(last_predictions, state)
+        assert list(input_choices.size()) == [3]
+        assert list(selective_weights.size()) == [3, 3]
+
+        # shape: (group_size,)
+        input_choices_check = np.array([5,
+                                        6,
+                                        copy_index])
+        np.testing.assert_equal(input_choices.numpy(), input_choices_check)
+
+        # shape: (group_size, trimmed_source_length)
+        selective_weights_check = np.array([[0.0, 0.0, 0.0],
+                                            [0.5, 0.0, 0.5],
+                                            [0.0, 0.5, 0.5]])
+        np.testing.assert_equal(selective_weights.numpy(), selective_weights_check)
