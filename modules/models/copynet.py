@@ -1,6 +1,7 @@
 import logging
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Any
 
+import numpy
 from overrides import overrides
 import torch
 from torch.nn.modules.linear import Linear
@@ -139,6 +140,7 @@ class CopyNet(Model):
                 source_tokens: Dict[str, torch.LongTensor],
                 source_duplicates: torch.Tensor,
                 target_pointers: torch.Tensor,
+                metadata: List[Dict[str, Any]],
                 target_tokens: Dict[str, torch.LongTensor] = None,
                 copy_indicators: torch.Tensor = None) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
@@ -185,6 +187,8 @@ class CopyNet(Model):
             if self._metrics:
                 for metric in self._metrics:
                     metric(source_tokens, target_tokens, copy_indicators, predictions)
+
+        output_dict["metadata"] = metadata
 
         return output_dict
 
@@ -562,6 +566,82 @@ class CopyNet(Model):
 
         return input_choices, selective_weights
 
+    def _gather_final_probs(self,
+                            generation_probs: torch.Tensor,
+                            copy_probs: torch.Tensor,
+                            state: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """
+        Combine copy probabilities with generation probabilities for matching tokens.
+
+        Parameters
+        ----------
+        generation_probs : ``torch.Tensor``
+            Shape: `(group_size, target_vocab_size)`
+        copy_probs : ``torch.Tensor``
+            Shape: `(group_size, trimmed_source_length)`
+        state : ``Dict[str, torch.Tensor]``
+
+        Returns
+        -------
+        torch.Tensor
+            Shape: `(group_size, target_vocab_size + trimmed_source_length)`.
+        """
+        _, trimmed_source_length = state["target_pointers"].size()
+
+        # shape: [(batch_size, *)]
+        modified_probs_list: List[torch.Tensor] = [generation_probs]
+        for i in range(trimmed_source_length):
+            # shape: (group_size,)
+            copy_probs_slice = copy_probs[:, i]
+
+            # `target_pointers` is a matrix of shape (group_size, trimmed_source_length)
+            # where element (i, j) is the vocab index of the target token that matches the jth
+            # source token in the ith group, if there is one, or the index of the OOV symbol otherwise.
+            # We'll use this to add copy scores to corresponding generation scores.
+            # shape: (group_size,)
+            target_pointers_slice = state["target_pointers"][:, i]
+
+            # The OOV index in the target_pointers_slice indicates that the source
+            # token is not in the target vocab, so we don't want to add that copy score
+            # to the OOV token.
+            copy_probs_to_add_mask = (target_pointers_slice != self._oov_index).float()
+            copy_probs_to_add = copy_probs_slice * copy_probs_to_add_mask
+            generation_probs.scatter_add_(
+                    -1, target_pointers_slice.unsqueeze(-1), copy_probs_to_add.unsqueeze(-1))
+
+            # We have to combine copy scores for duplicate source tokens so that
+            # we can find the overall most likely source token. So, if this is the first
+            # occurence of this particular source token, we add the probs from all other
+            # occurences, otherwise we zero it out since it was already accounted for.
+            if i < (trimmed_source_length - 1):
+                # Sum copy scores from future occurences of source token.
+                # shape: (group_size, trimmed_source_length - i)
+                source_future_occurences = state["source_duplicates"][:, i, (i+1):]
+                # shape: (group_size, trimmed_source_length - i)
+                future_copy_probs = copy_probs[:, (i+1):] * source_future_occurences
+                # shape: (group_size,)
+                summed_future_copy_probs = future_copy_probs.sum(dim=-1)
+                copy_probs_slice = copy_probs_slice + summed_future_copy_probs
+            if i > 0:
+                # Zero-out copy probs that we have already accounted for.
+                # shape: (group_size, i)
+                source_previous_occurences = state["source_duplicates"][:, i, 0:i]
+                # shape: (group_size,)
+                duplicate_mask = (source_previous_occurences.sum(dim=-1) == 0).float()
+                copy_probs_slice = copy_probs_slice * duplicate_mask
+
+            # Finally, we zero-out copy scores that we added to the generation scores
+            # above so that we don't double-count them.
+            # shape: (group_size,)
+            left_over_copy_probs = copy_probs_slice * (1.0 - copy_probs_to_add_mask)
+
+            modified_probs_list.append(left_over_copy_probs.unsqueeze(-1))
+
+        # shape: (group_size, target_vocab_size + trimmed_source_length)
+        modified_probs = torch.cat(modified_probs_list, dim=-1)
+
+        return modified_probs
+
     def take_search_step(self,
                          last_predictions: torch.Tensor,
                          state: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -657,59 +737,10 @@ class CopyNet(Model):
         # score for each token in the extended vocab, we have to go through and add
         # the copy scores to the generation scores of matching target tokens, and sum
         # the copy scores of duplicate source tokens.
-        # shape: [(batch_size, *)]
-        modified_probs_list: List[torch.Tensor] = [generation_probs]
-        for i in range(trimmed_source_length):
-            # shape: (group_size,)
-            copy_probs_slice = copy_probs[:, i]
-
-            # `target_pointers` is a matrix of shape (group_size, trimmed_source_length)
-            # where element (i, j) is the vocab index of the target token that matches the jth
-            # source token in the ith group, if there is one, or the index of the OOV symbol otherwise.
-            # We'll use this to add copy scores to corresponding generation scores.
-            # shape: (group_size,)
-            target_pointers_slice = state["target_pointers"][:, i]
-
-            # The OOV index in the target_pointers_slice indicates that the source
-            # token is not in the target vocab, so we don't want to add that copy score
-            # to the OOV token.
-            copy_probs_to_add_mask = (target_pointers_slice != self._oov_index).float()
-            copy_probs_to_add = copy_probs_slice * copy_probs_to_add_mask
-            generation_probs.scatter_add_(
-                    -1, target_pointers_slice.unsqueeze(-1), copy_probs_to_add.unsqueeze(-1))
-
-            # We now zero-out copy scores that we added to the generation scores
-            # above so that we don't double-count them.
-            # shape: (group_size,)
-            left_over_copy_probs = copy_probs_slice * (1.0 - copy_probs_to_add_mask)
-
-            # Lastly, we have to combine copy scores for duplicate source tokens so that
-            # we can find the overall most likely source token. So, if this is the first
-            # occurence of this particular source token, we add the probs from all other
-            # occurences, otherwise we zero it out since it was already accounted for.
-            if i < (trimmed_source_length - 1):
-                # Sum copy scores from future occurences of source token.
-                # shape: (group_size, trimmed_source_length - i)
-                source_future_occurences = state["source_duplicates"][:, i, (i+1):]
-                # shape: (group_size, trimmed_source_length - i)
-                future_copy_probs = copy_probs[:, (i+1):] * source_future_occurences
-                # shape: (group_size,)
-                summed_future_copy_probs = future_copy_probs.sum(dim=-1)
-                left_over_copy_probs = left_over_copy_probs + summed_future_copy_probs
-            if i > 0:
-                # Zero-out copy probs that we have already accounted for.
-                # shape: (group_size, i)
-                source_previous_occurences = state["source_duplicates"][:, i, 0:i]
-                # shape: (group_size,)
-                duplicate_mask = (source_previous_occurences.sum(dim=-1) == 0).float()
-                left_over_copy_probs = left_over_copy_probs * duplicate_mask
-
-            modified_probs_list.append(left_over_copy_probs.unsqueeze(-1))
-
         # shape: (group_size, target_vocab_size + trimmed_source_length)
-        modified_probs = torch.cat(modified_probs_list, dim=-1)
+        final_probs = self._gather_final_probs(generation_probs, copy_probs, state)
 
-        return modified_probs.log(), state
+        return final_probs.log(), state
 
     @overrides
     def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -720,7 +751,28 @@ class CopyNet(Model):
         OR tokens in source sentence. Here we gather the actual tokens corresponding to
         the indices.
         """
-        # TODO
+        # shape: (batch_size, beam_size, target_vocab_size + trimmed_source_length)
+        predicted_indices = output_dict["predictions"]
+        if not isinstance(predicted_indices, numpy.ndarray):
+            predicted_indices = predicted_indices.detach().cpu().numpy()
+        predicted_tokens: List[List[List[str]]] = []
+        for batch_item, metadata in zip(predicted_indices, output_dict["metadata"]):
+            batch_predicted_tokens: List[List[str]] = []
+            for indices in batch_item:
+                tokens: List[str] = []
+                indices = list(indices)
+                if self._end_index in indices:
+                    indices = indices[:indices.index(self._end_index)]
+                for index in indices:
+                    if index >= self._target_vocab_size:
+                        adjusted_index = index - self._target_vocab_size
+                        token = metadata["source_tokens"][adjusted_index]
+                    else:
+                        token = self.vocab.get_token_from_index(index, self._target_namespace)
+                    tokens.append(token)
+                batch_predicted_tokens.append(tokens)
+            predicted_tokens.append(batch_predicted_tokens)
+        output_dict["predicted_tokens"] = predicted_tokens
         return output_dict
 
     @overrides

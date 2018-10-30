@@ -10,8 +10,9 @@ import torch
 from allennlp.common.checks import ConfigurationError
 from allennlp.common.testing import ModelTestCase
 
+from modules.data.dataset_readers import CopyNetDatasetReader
 from modules.models import CopyNet  # pylint: disable=unused-import
-from modules.data.dataset_readers import CopyNetDatasetReader  # pylint: disable=unused-import
+from modules.predictors import CopyNetPredictor
 
 
 class CopyNetTest(ModelTestCase):
@@ -21,8 +22,18 @@ class CopyNetTest(ModelTestCase):
         self.set_up_model("modules/tests/fixtures/copynet/experiment.json",
                           "modules/tests/fixtures/copynet/copyover.tsv")
 
-    def test_model_can_train_save_and_load(self):
-        self.ensure_model_can_train_save_and_load(self.param_file, tolerance=1e-2)
+    def test_model_can_train_save_load_predict(self):
+        _, loaded_model = \
+            self.ensure_model_can_train_save_and_load(self.param_file, tolerance=1e-2)
+
+        end_token = self.vocab.get_token_from_index(self.model._end_index, self.model._target_namespace)
+        predictor = CopyNetPredictor(loaded_model, CopyNetDatasetReader(self.model._target_namespace))
+        output_dict = predictor.predict("these tokens should be copied over : hello world")
+        assert len(output_dict["predictions"]) == loaded_model._beam_search.beam_size
+        assert len(output_dict["predicted_tokens"]) == loaded_model._beam_search.beam_size
+        for predicted_tokens in output_dict["predicted_tokens"]:
+            assert all(isinstance(x, str) for x in predicted_tokens)
+            assert end_token not in predicted_tokens
 
     def test_vocab(self):
         vocab = self.model.vocab
@@ -174,3 +185,50 @@ class CopyNetTest(ModelTestCase):
                                             [0.5, 0.0, 0.5],
                                             [0.0, 0.5, 0.5]])
         np.testing.assert_equal(selective_weights.numpy(), selective_weights_check)
+
+    def test_gather_final_probs(self):
+        target_vocab_size = self.model._target_vocab_size
+        assert target_vocab_size == 8
+
+        oov_index = self.model._oov_index
+        assert oov_index not in [5, 6]
+
+        # shape: (group_size, trimmed_source_length)
+        target_pointers = torch.tensor([[6, oov_index, oov_index],
+                                        [oov_index, 5, 5]])
+        # shape: (group_size, trimmed_source_length, trimmed_source_length)
+        source_duplicates = torch.tensor([
+                [[1, 0, 0],
+                 [0, 1, 1],
+                 [0, 1, 1]],
+                [[1, 0, 0],
+                 [0, 1, 1],
+                 [0, 1, 1]],
+        ]).float()
+        # shape: (group_size, target_vocab_size)
+        generation_probs = torch.tensor([[0.1] * target_vocab_size,
+                                         [0.1] * target_vocab_size])
+        # shape: (group_size, trimmed_source_length)
+        copy_probs = torch.tensor([[0.1, 0.1, 0.1],
+                                   [0.1, 0.1, 0.1]])
+
+        state = {
+                "target_pointers": target_pointers,
+                "source_duplicates": source_duplicates,
+        }
+
+        final_probs = self.model._gather_final_probs(generation_probs, copy_probs, state)
+        assert list(final_probs.size()) == [2, target_vocab_size + 3]
+
+        final_probs_check = np.array([
+                # First copy token matches a source token. So first copy score is added to
+                # corresponding generation score.
+                # Second and third copy tokens match, so third copy score added to second
+                # copy score.
+                [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.1,  # modified generation scores
+                 0.0, 0.2, 0.0],                          # modified copy scores
+                # Second and third copy tokens match the same token in target vocab.
+                [0.1, 0.1, 0.1, 0.1, 0.1, 0.3, 0.1, 0.1,  # modified generation scores
+                 0.1, 0.0, 0.0]                           # modified copy scores
+        ])
+        np.testing.assert_array_almost_equal(final_probs.numpy(), final_probs_check)

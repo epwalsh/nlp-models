@@ -8,7 +8,7 @@ from allennlp.common.checks import ConfigurationError
 from allennlp.common.file_utils import cached_path
 from allennlp.common.util import START_SYMBOL, END_SYMBOL
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.fields import TextField, ArrayField
+from allennlp.data.fields import TextField, ArrayField, MetadataField
 from allennlp.data.instance import Instance
 from allennlp.data.tokenizers import Token, Tokenizer, WordTokenizer
 from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
@@ -135,6 +135,7 @@ class CopyNetDatasetReader(DatasetReader):
                 "source_tokens": source_field,
                 "source_duplicates": source_duplicates_field,
                 "target_pointers": target_pointer_field,
+                "metadata": MetadataField({"source_tokens": [x.text for x in tokenized_source[1:-1]]})
         }
 
         if target_string is not None:
