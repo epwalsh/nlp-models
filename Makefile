@@ -1,3 +1,4 @@
+debug         = 0
 test          = modules
 COVERAGE     := $(addprefix --cov=, $(test))
 PYTHONPATH    = allennlp
@@ -12,7 +13,11 @@ EXPERIMENTS  := $(wildcard $(EXPERIMENTDIR)/**/*.json)
 
 .PHONY : train
 train :
+ifeq ($(debug),0)
 	./scripts/train.sh
+else
+	CUDA_LAUNCH_BLOCKING=1 ./scripts/train.sh
+endif
 
 # Need this to force targets to build, even when the target file exists.
 .PHONY : phony-target
@@ -47,7 +52,7 @@ lint :
 .PHONY : unit-test
 unit-test :
 	@echo "Unit tests: pytest"
-ifeq ($(suffix $(test)),.py)
+ifneq ($(findstring test,$(test)),)
 	PYTHONPATH=$(PYTHONPATH) python -m pytest -v --color=yes $(test)
 else
 	PYTHONPATH=$(PYTHONPATH) python -m pytest -v --cov-config .coveragerc $(COVERAGE) --color=yes $(test)

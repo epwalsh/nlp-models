@@ -9,7 +9,7 @@ class TestNL2BashReader(AllenNlpTestCase):
 
     def setUp(self):
         super(TestNL2BashReader, self).setUp()
-        self.reader = NL2BashDatasetReader()
+        self.reader = NL2BashDatasetReader("target_tokens")
         instances = self.reader.read("modules/tests/fixtures/nl2bash/train.tsv")
         self.instances = ensure_list(instances)
 
@@ -21,11 +21,11 @@ class TestNL2BashReader(AllenNlpTestCase):
         assert [t.text for t in fields["target_tokens"].tokens] == \
             ["@start@", "bunzip", "2", " ", "file", ".", "bz", "2", "@end@"]
 
-    def test_source_indices(self):
-        source_indices = self.instances[2].fields["source_indices"]
+    def test_copy_indicators(self):
+        copy_indicators = self.instances[2].fields["copy_indicators"]
 
         # shape should be (target_length, source_length - 2)
-        assert source_indices.array.shape == (9, 9)
+        assert copy_indicators.array.shape == (9, 9)
 
         check = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0],  # @START@
                           [0, 0, 0, 0, 0, 0, 0, 0, 0],  # bunzip
@@ -36,7 +36,7 @@ class TestNL2BashReader(AllenNlpTestCase):
                           [0, 0, 0, 0, 1, 0, 0, 0, 0],  # bz
                           [0, 0, 0, 0, 0, 1, 0, 0, 0],  # 2
                           [0, 0, 0, 0, 0, 0, 0, 0, 0]]) # @END@
-        np.testing.assert_equal(source_indices.array, check)
+        np.testing.assert_equal(copy_indicators.array, check)
 
     def test_preprocess_target(self):
         # pylint: disable=protected-access
