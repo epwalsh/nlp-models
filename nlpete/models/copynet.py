@@ -143,11 +143,11 @@ class CopyNet(Model):
     @overrides
     def forward(self,  # type: ignore
                 source_tokens: Dict[str, torch.LongTensor],
-                source_duplicates: torch.Tensor,
-                target_pointers: torch.Tensor,
+                source_to_source: torch.Tensor,
+                source_to_target: torch.Tensor,
                 metadata: List[Dict[str, Any]],
                 target_tokens: Dict[str, torch.LongTensor] = None,
-                copy_indicators: torch.Tensor = None) -> Dict[str, torch.Tensor]:
+                target_to_source: torch.Tensor = None) -> Dict[str, torch.Tensor]:
         # pylint: disable=arguments-differ
         """
         Make foward pass with decoder logic for producing the entire target sequence.
@@ -157,16 +157,16 @@ class CopyNet(Model):
         source_tokens : ``Dict[str, torch.LongTensor]``, required
             The output of `TextField.as_array()` applied on the source `TextField`. This will be
             passed through a `TextFieldEmbedder` and then through an encoder.
-        source_duplicates : ``torch.Tensor``, required
+        source_to_source : ``torch.Tensor``, required
             Tensor containing indicators of which source tokens match each other.
             Has shape: `(batch_size, trimmed_source_length, trimmed_source_length)`.
-        target_pointers : ``torch.Tensor``, required
+        source_to_target : ``torch.Tensor``, required
             Tensor containing vocab index of each source token with respect to the
             target vocab namespace. Shape: `(batch_size, trimmed_source_length)`.
         target_tokens : ``Dict[str, torch.LongTensor]``, optional (default = None)
             Output of `Textfield.as_array()` applied on target `TextField`. We assume that the
             target tokens are also represented as a `TextField`.
-        copy_indicators : ``Dict[str, torch.LongTensor]``, optional (default = None)
+        target_to_source : ``Dict[str, torch.LongTensor]``, optional (default = None)
             A sparse tensor of shape `(batch_size, target_sequence_length, source_sentence_length - 2)` that
             indicates which tokens in the source sentence match each token in the target sequence.
             The last dimension is `source_sentence_length - 2` because we exclude the
@@ -177,11 +177,11 @@ class CopyNet(Model):
         -------
         Dict[str, torch.Tensor]
         """
-        state = self._encode(source_tokens, source_duplicates, target_pointers)
+        state = self._encode(source_tokens, source_to_source, source_to_target)
 
         if target_tokens:
             state = self._init_decoder_state(state)
-            output_dict = self._forward_loop(target_tokens, copy_indicators, state)
+            output_dict = self._forward_loop(target_tokens, target_to_source, state)
         else:
             output_dict = {}
 
@@ -222,8 +222,8 @@ class CopyNet(Model):
 
     def _encode(self,
                 source_tokens: Dict[str, torch.Tensor],
-                source_duplicates: torch.Tensor,
-                target_pointers: torch.Tensor) -> Dict[str, torch.Tensor]:
+                source_to_source: torch.Tensor,
+                source_to_target: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
         Encode source input sentences.
         """
@@ -239,8 +239,8 @@ class CopyNet(Model):
         state = {
                 "source_mask": source_mask,
                 "encoder_outputs": encoder_outputs,
-                "source_duplicates": source_duplicates,
-                "target_pointers": target_pointers,
+                "source_to_source": source_to_source,
+                "source_to_target": source_to_target,
         }
 
         return state
@@ -299,7 +299,7 @@ class CopyNet(Model):
                         generation_scores: torch.Tensor,
                         copy_scores: torch.Tensor,
                         target_tokens: torch.Tensor,
-                        copy_indicators: torch.Tensor,
+                        target_to_source: torch.Tensor,
                         copy_mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get the log-likelihood contribution from a single timestep.
@@ -312,7 +312,7 @@ class CopyNet(Model):
             Shape: `(batch_size, trimmed_source_length)`
         target_tokens : ``torch.Tensor``
             Shape: `(batch_size,)`
-        copy_indicators : ``torch.Tensor``
+        target_to_source : ``torch.Tensor``
             Shape: `(batch_size, trimmed_source_length)`
         copy_mask : ``torch.Tensor``
             Shape: `(batch_size, trimmed_source_length)`
@@ -344,7 +344,7 @@ class CopyNet(Model):
         # need the un-summed probabilities to create the selective read state
         # during the next time step.
         # shape: (batch_size, trimmed_source_length)
-        raw_selective_weights = probs[:, target_size:] * copy_indicators.float()
+        raw_selective_weights = probs[:, target_size:] * target_to_source.float()
         # shape: (batch_size,)
         sum_selective_weights = raw_selective_weights.sum(-1)
         # shape: (batch_size, trimmed_source_length)
@@ -354,7 +354,7 @@ class CopyNet(Model):
         # only when the gold target token is not OOV or there are no matching tokens
         # in the source sentence.
         # shape: (batch_size,)
-        gen_mask = ((target_tokens != self._oov_index) | (copy_indicators.sum(-1) == 0)).float()
+        gen_mask = ((target_tokens != self._oov_index) | (target_to_source.sum(-1) == 0)).float()
 
         # Now we get the generation score for the gold target token.
         # shape: (batch_size,)
@@ -371,7 +371,7 @@ class CopyNet(Model):
 
     def _forward_loop(self,
                       target_tokens: Dict[str, torch.LongTensor],
-                      copy_indicators: torch.Tensor,
+                      target_to_source: torch.Tensor,
                       state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
         Calculate the loss against gold targets.
@@ -409,7 +409,7 @@ class CopyNet(Model):
             if timestep < num_decoding_steps - 1:
                 # Get mask tensor indicating which instances were copied.
                 # shape: (batch_size,)
-                copied = (copy_indicators[:, timestep, :].sum(-1) > 0).long()
+                copied = (target_to_source[:, timestep, :].sum(-1) > 0).long()
 
                 # shape: (batch_size,)
                 input_choices = input_choices * (1 - copied) + copy_input_choices * copied
@@ -430,13 +430,13 @@ class CopyNet(Model):
             step_target_tokens = target_tokens["tokens"][:, timestep + 1]
 
             # shape: (batch_size, max_input_sequence_length - 2)
-            step_copy_indicators = copy_indicators[:, timestep + 1]
+            step_target_to_source = target_to_source[:, timestep + 1]
 
             step_log_likelihood, selective_weights = self._get_ll_contrib(
                     generation_scores,
                     copy_scores,
                     step_target_tokens,
-                    step_copy_indicators,
+                    step_target_to_source,
                     copy_mask)
             step_log_likelihoods.append(step_log_likelihood.unsqueeze(1))
 
@@ -510,7 +510,7 @@ class CopyNet(Model):
             `input_choices` (shape `(group_size,)`) and `selective_weights`
             (shape `(group_size, trimmed_source_length)`).
         """
-        group_size, trimmed_source_length = state["target_pointers"].size()
+        group_size, trimmed_source_length = state["source_to_target"].size()
 
         # This is a mask indicating which last predictions were copied from the
         # the source AND not in the target vocabulary (OOV).
@@ -529,15 +529,15 @@ class CopyNet(Model):
         # is in the target vocab (even if it also appeared in the source sentence),
         # its index will be the corresponding target vocab index, not its index in
         # the source sentence offset by the target vocab size. So we first
-        # use `state["target_pointers"]` to get an indicator of every source token
+        # use `state["source_to_target"]` to get an indicator of every source token
         # that matches the predicted target token.
         # shape: (group_size, trimmed_source_length)
         expanded_last_predictions = last_predictions.unsqueeze(-1).expand(group_size, trimmed_source_length)
         # shape: (group_size, trimmed_source_length)
-        source_copied_and_generated = (state["target_pointers"] == expanded_last_predictions).long()
+        source_copied_and_generated = (state["source_to_target"] == expanded_last_predictions).long()
 
         # In order to get indicators for copied source tokens that are OOV with respect
-        # to the target vocab, we'll make use of `state["source_duplicates"]`.
+        # to the target vocab, we'll make use of `state["source_to_source"]`.
         # First we adjust predictions relative to the start of the source tokens.
         # This makes sense because predictions for copied tokens are given by the index of the copied
         # token in the source sentence, offset by the size of the target vocabulary.
@@ -547,16 +547,16 @@ class CopyNet(Model):
         # and therefore invalid. So we zero them out.
         adjusted_predictions = adjusted_predictions * only_copied_mask
         # shape: (group_size, trimmed_source_length,  trimmed_source_length)
-        source_duplicates = state["source_duplicates"]
-        # Expand adjusted_predictions to match source_duplicates shape.
+        source_to_source = state["source_to_source"]
+        # Expand adjusted_predictions to match source_to_source shape.
         # shape: (group_size, trimmed_source_length, trimmed_source_length)
         adjusted_predictions = adjusted_predictions.unsqueeze(-1)\
             .unsqueeze(-1)\
-            .expand(source_duplicates.size())
+            .expand(source_to_source.size())
         # The mask will contain indicators for source tokens that were copied
         # during the last timestep.
         # shape: (group_size, trimmed_source_length)
-        source_only_copied = source_duplicates.gather(-1, adjusted_predictions)[:, :, 0].long()
+        source_only_copied = source_to_source.gather(-1, adjusted_predictions)[:, :, 0].long()
         # Since we zero'd-out indices for predictions that were not copied,
         # we need to zero out all entries of this mask corresponding to those predictions.
         source_only_copied = source_only_copied * only_copied_mask.\
@@ -594,7 +594,7 @@ class CopyNet(Model):
         torch.Tensor
             Shape: `(group_size, target_vocab_size + trimmed_source_length)`.
         """
-        _, trimmed_source_length = state["target_pointers"].size()
+        _, trimmed_source_length = state["source_to_target"].size()
 
         # shape: [(batch_size, *)]
         modified_probs_list: List[torch.Tensor] = [generation_probs]
@@ -602,20 +602,20 @@ class CopyNet(Model):
             # shape: (group_size,)
             copy_probs_slice = copy_probs[:, i]
 
-            # `target_pointers` is a matrix of shape (group_size, trimmed_source_length)
+            # `source_to_target` is a matrix of shape (group_size, trimmed_source_length)
             # where element (i, j) is the vocab index of the target token that matches the jth
             # source token in the ith group, if there is one, or the index of the OOV symbol otherwise.
             # We'll use this to add copy scores to corresponding generation scores.
             # shape: (group_size,)
-            target_pointers_slice = state["target_pointers"][:, i]
+            source_to_target_slice = state["source_to_target"][:, i]
 
-            # The OOV index in the target_pointers_slice indicates that the source
+            # The OOV index in the source_to_target_slice indicates that the source
             # token is not in the target vocab, so we don't want to add that copy score
             # to the OOV token.
-            copy_probs_to_add_mask = (target_pointers_slice != self._oov_index).float()
+            copy_probs_to_add_mask = (source_to_target_slice != self._oov_index).float()
             copy_probs_to_add = copy_probs_slice * copy_probs_to_add_mask
             generation_probs.scatter_add_(
-                    -1, target_pointers_slice.unsqueeze(-1), copy_probs_to_add.unsqueeze(-1))
+                    -1, source_to_target_slice.unsqueeze(-1), copy_probs_to_add.unsqueeze(-1))
 
             # We have to combine copy scores for duplicate source tokens so that
             # we can find the overall most likely source token. So, if this is the first
@@ -624,7 +624,7 @@ class CopyNet(Model):
             if i < (trimmed_source_length - 1):
                 # Sum copy scores from future occurences of source token.
                 # shape: (group_size, trimmed_source_length - i)
-                source_future_occurences = state["source_duplicates"][:, i, (i+1):]
+                source_future_occurences = state["source_to_source"][:, i, (i+1):]
                 # shape: (group_size, trimmed_source_length - i)
                 future_copy_probs = copy_probs[:, (i+1):] * source_future_occurences
                 # shape: (group_size,)
@@ -633,7 +633,7 @@ class CopyNet(Model):
             if i > 0:
                 # Zero-out copy probs that we have already accounted for.
                 # shape: (group_size, i)
-                source_previous_occurences = state["source_duplicates"][:, i, 0:i]
+                source_previous_occurences = state["source_to_source"][:, i, 0:i]
                 # shape: (group_size,)
                 duplicate_mask = (source_previous_occurences.sum(dim=-1) == 0).float()
                 copy_probs_slice = copy_probs_slice * duplicate_mask
@@ -699,7 +699,7 @@ class CopyNet(Model):
         -----
         `group_size` != `batch_size`. In fact, `group_size` = `batch_size * beam_size`.
         """
-        _, trimmed_source_length = state["target_pointers"].size()
+        _, trimmed_source_length = state["source_to_target"].size()
 
         # Get input to the decoder RNN and the selective weights. `input_choices`
         # is the result of replacing target OOV tokens in `last_predictions` with the

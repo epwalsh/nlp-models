@@ -1,14 +1,19 @@
 import re
+import logging
 from typing import Dict
 
 from overrides import overrides
 
+from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.tokenizers import Tokenizer, WordTokenizer
 from allennlp.data.token_indexers import TokenIndexer
 
 from nlpete.data.dataset_readers.copynet import CopyNetDatasetReader
 from nlpete.data.tokenizers.word_splitter import NL2BashWordSplitter
+
+
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 utilities = [  # pylint: disable=invalid-name
@@ -110,9 +115,19 @@ class NL2BashDatasetReader(CopyNetDatasetReader):
                          target_token_indexers=target_token_indexers,
                          lazy=lazy)
 
-    @overrides
     def _preprocess_target(self, target_string: str) -> str:
         target_string = self.prefix_finder.sub(r"\g<1>\g<3>\g<4>", target_string)
         target_string = self.sudo_finder.sub("", target_string)
         target_string = self.prompt_finder.sub("", target_string)
         return target_string
+
+    @overrides
+    def _read(self, file_path):
+        with open(cached_path(file_path), "r") as data_file:
+            logger.info("Reading instances from lines in file at: %s", file_path)
+            for line_num, line in enumerate(data_file):
+                source_sequence, target_sequence = self._read_line(line_num, line)
+                if not source_sequence:
+                    continue
+                target_sequence = self._preprocess_target(target_sequence)
+                yield self.text_to_instance(source_sequence, target_sequence)
