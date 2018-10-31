@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple, List, Any
+from typing import Dict, Tuple, List, Any, Union
 
 import numpy
 from overrides import overrides
@@ -180,15 +180,17 @@ class CopyNet(Model):
         else:
             output_dict = {}
 
+        output_dict["metadata"] = metadata
+
         if not self.training:
             state = self._init_decoder_state(state)
             predictions = self._forward_beam_search(state)
             output_dict.update(predictions)
             if self._metrics:
+                output_dict = self.decode(output_dict, keep_only_best=True)
+                predicted_tokens = output_dict["predicted_tokens"]
                 for metric in self._metrics:
-                    metric(source_tokens, target_tokens, copy_indicators, predictions)
-
-        output_dict["metadata"] = metadata
+                    metric(predicted_tokens, [x["target_tokens"] for x in metadata])
 
         return output_dict
 
@@ -743,7 +745,9 @@ class CopyNet(Model):
         return final_probs.log(), state
 
     @overrides
-    def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def decode(self,  # pylint: disable=arguments-differ
+               output_dict: Dict[str, torch.Tensor],
+               keep_only_best: bool = False) -> Dict[str, Any]:
         """
         Finalize predictions.
 
@@ -752,13 +756,14 @@ class CopyNet(Model):
         the indices.
         """
         # shape: (batch_size, beam_size, target_vocab_size + trimmed_source_length)
+        n_best = 1 if keep_only_best else self._beam_search.beam_size
         predicted_indices = output_dict["predictions"]
         if not isinstance(predicted_indices, numpy.ndarray):
             predicted_indices = predicted_indices.detach().cpu().numpy()
-        predicted_tokens: List[List[List[str]]] = []
+        predicted_tokens: List[Union[List[List[str]], List[str]]] = []
         for batch_item, metadata in zip(predicted_indices, output_dict["metadata"]):
             batch_predicted_tokens: List[List[str]] = []
-            for indices in batch_item:
+            for indices in batch_item[:n_best]:
                 tokens: List[str] = []
                 indices = list(indices)
                 if self._end_index in indices:
@@ -771,7 +776,10 @@ class CopyNet(Model):
                         token = self.vocab.get_token_from_index(index, self._target_namespace)
                     tokens.append(token)
                 batch_predicted_tokens.append(tokens)
-            predicted_tokens.append(batch_predicted_tokens)
+            if keep_only_best:
+                predicted_tokens.append(batch_predicted_tokens[0])
+            else:
+                predicted_tokens.append(batch_predicted_tokens)
         output_dict["predicted_tokens"] = predicted_tokens
         return output_dict
 
