@@ -10,17 +10,17 @@ import torch
 from allennlp.common.checks import ConfigurationError
 from allennlp.common.testing import ModelTestCase
 
-from modules.data.dataset_readers import CopyNetDatasetReader
-from modules.models import CopyNet  # pylint: disable=unused-import
-from modules.predictors import CopyNetPredictor
+from nlpete.data.dataset_readers import CopyNetDatasetReader
+from nlpete.models import CopyNet  # pylint: disable=unused-import
+from nlpete.predictors import CopyNetPredictor
 
 
 class CopyNetTest(ModelTestCase):
 
     def setUp(self):
         super().setUp()
-        self.set_up_model("modules/tests/fixtures/copynet/experiment.json",
-                          "modules/tests/fixtures/copynet/copyover.tsv")
+        self.set_up_model("nlpete/tests/fixtures/copynet/experiment.json",
+                          "nlpete/tests/fixtures/copynet/copyover.tsv")
 
     def test_model_can_train_save_load_predict(self):
         _, loaded_model = \

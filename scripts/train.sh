@@ -144,9 +144,9 @@ mkdir -p "${serialization_dir}"
 SECONDS=0
 PYTHONPATH=$ROOTDIR allennlp train "$model_file" \
     --serialization-dir "$serialization_dir" \
-    --include-package modules.data.dataset_readers \
-    --include-package modules.models \
-    --include-package modules.training.metrics \
+    --include-package nlpete.data.dataset_readers \
+    --include-package nlpete.models \
+    --include-package nlpete.training.metrics \
     $allennlp_extra_args
 
 result=$?

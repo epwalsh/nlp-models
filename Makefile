@@ -1,5 +1,5 @@
 debug         = 0
-test          = modules
+test          = nlpete
 COVERAGE     := $(addprefix --cov=, $(test))
 PYTHONPATH    = allennlp
 DATADIR       = data

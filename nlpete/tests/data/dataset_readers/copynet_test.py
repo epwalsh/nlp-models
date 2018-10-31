@@ -9,16 +9,16 @@ from allennlp.data import DatasetReader
 from allennlp.data.tokenizers import Token
 from allennlp.data.vocabulary import Vocabulary, DEFAULT_OOV_TOKEN
 
-from modules.data.dataset_readers import CopyNetDatasetReader  # pylint: disable=unused-import
+from nlpete.data.dataset_readers import CopyNetDatasetReader  # pylint: disable=unused-import
 
 
 class TestCopyNetReader(AllenNlpTestCase):
 
     def setUp(self):
         super(TestCopyNetReader, self).setUp()
-        params = Params.from_file("modules/tests/fixtures/copynet/experiment.json")
+        params = Params.from_file("nlpete/tests/fixtures/copynet/experiment.json")
         self.reader = DatasetReader.from_params(params["dataset_reader"])
-        instances = self.reader.read("modules/tests/fixtures/copynet/copyover.tsv")
+        instances = self.reader.read("nlpete/tests/fixtures/copynet/copyover.tsv")
         self.instances = ensure_list(instances)
         self.vocab = Vocabulary.from_params(params=params["vocabulary"], instances=instances)
 

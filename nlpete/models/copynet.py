@@ -17,7 +17,7 @@ from allennlp.nn import util
 from allennlp.training.metrics import Metric
 from allennlp.nn.beam_search import BeamSearch
 
-from modules.training.metrics import BLEU
+from nlpete.training.metrics import BLEU
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name

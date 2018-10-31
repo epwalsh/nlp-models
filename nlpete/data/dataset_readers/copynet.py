@@ -13,7 +13,7 @@ from allennlp.data.instance import Instance
 from allennlp.data.tokenizers import Token, Tokenizer, WordTokenizer
 from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
 
-from modules.data.fields import CopyMapField
+from nlpete.data.fields import CopyMapField
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name

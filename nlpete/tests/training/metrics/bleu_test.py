@@ -5,7 +5,7 @@ import math
 from numpy.testing import assert_almost_equal
 from allennlp.common.testing import AllenNlpTestCase
 
-from modules.training.metrics import BLEU
+from nlpete.training.metrics import BLEU
 
 
 class BleuTest(AllenNlpTestCase):

@@ -2,7 +2,7 @@ import numpy as np
 
 from allennlp.common.testing import AllenNlpTestCase
 from allennlp.common.util import ensure_list
-from modules.data.dataset_readers import NL2BashDatasetReader
+from nlpete.data.dataset_readers import NL2BashDatasetReader
 
 
 class TestNL2BashReader(AllenNlpTestCase):
@@ -10,7 +10,7 @@ class TestNL2BashReader(AllenNlpTestCase):
     def setUp(self):
         super(TestNL2BashReader, self).setUp()
         self.reader = NL2BashDatasetReader("target_tokens")
-        instances = self.reader.read("modules/tests/fixtures/nl2bash/train.tsv")
+        instances = self.reader.read("nlpete/tests/fixtures/nl2bash/train.tsv")
         self.instances = ensure_list(instances)
 
     def test_tokens(self):
