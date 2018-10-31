@@ -44,7 +44,7 @@ class BLEU(Metric):
     def _get_brevity_penalty(self) -> float:
         if self._prediction_lengths > self._reference_lengths:
             return 1.0
-        if self._reference_lengths == 0:
+        if self._reference_lengths == 0 or self._prediction_lengths == 0:
             return 0.0
         return math.exp(1.0 - self._reference_lengths / self._prediction_lengths)
 

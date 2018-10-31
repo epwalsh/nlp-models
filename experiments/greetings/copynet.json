@@ -68,9 +68,9 @@
     "target_embedding_dim": 10,
     "beam_size": 3,
     "max_decoding_steps": 20,
-    "metrics": [{
+    "metric": {
       "type": "bleu"
-    }]
+    }
   },
   "iterator": {
     "type": "bucket",

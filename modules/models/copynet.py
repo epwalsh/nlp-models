@@ -17,6 +17,8 @@ from allennlp.nn import util
 from allennlp.training.metrics import Metric
 from allennlp.nn.beam_search import BeamSearch
 
+from modules.training.metrics import BLEU
+
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
@@ -61,8 +63,11 @@ class CopyNet(Model):
         The namespace for the source vocabulary.
     target_namespace : ``str``, optional (default = 'target_tokens')
         The namespace for the target vocabulary.
-    metrics : ``List[Metric]``, optional (default = None)
-        List of metrics to track.
+    metric : ``Metric``, optional (default = BLEU)
+        A metrics to track on a validation set. Note that this metrics must accept
+        a list of predicted tokens (as strings) and a corresponding list of
+        gold tokens (as strings). Also, the `Metric.get_metrics()` method is expected
+        to output a dict, as opposed to a float.
     """
 
     def __init__(self,
@@ -76,9 +81,9 @@ class CopyNet(Model):
                  copy_token: str = "@COPY@",
                  source_namespace: str = "source_tokens",
                  target_namespace: str = "target_tokens",
-                 metrics: List[Metric] = None) -> None:
+                 metric: Metric = BLEU()) -> None:
         super(CopyNet, self).__init__(vocab)
-        self._metrics = metrics
+        self._metric = metric
         self._source_namespace = source_namespace
         self._target_namespace = target_namespace
         self._src_start_index = self.vocab.get_token_index(START_SYMBOL, self._source_namespace)
@@ -186,11 +191,12 @@ class CopyNet(Model):
             state = self._init_decoder_state(state)
             predictions = self._forward_beam_search(state)
             output_dict.update(predictions)
-            if self._metrics:
-                output_dict = self.decode(output_dict, keep_only_best=True)
-                predicted_tokens = output_dict["predicted_tokens"]
-                for metric in self._metrics:
-                    metric(predicted_tokens, [x["target_tokens"] for x in metadata])
+            if self._metric and target_tokens:
+                predicted_tokens = self._get_predicted_tokens(output_dict["predictions"],
+                                                              output_dict["metadata"],
+                                                              n_best=1)
+                reference_tokens = [x["target_tokens"] for x in metadata]
+                self._metric(predicted_tokens, reference_tokens)
 
         return output_dict
 
@@ -744,26 +750,16 @@ class CopyNet(Model):
 
         return final_probs.log(), state
 
-    @overrides
-    def decode(self,  # pylint: disable=arguments-differ
-               output_dict: Dict[str, torch.Tensor],
-               keep_only_best: bool = False) -> Dict[str, Any]:
-        """
-        Finalize predictions.
-
-        After a beam search, the predicted indices correspond to tokens in the target vocabulary
-        OR tokens in source sentence. Here we gather the actual tokens corresponding to
-        the indices.
-        """
-        # shape: (batch_size, beam_size, target_vocab_size + trimmed_source_length)
-        n_best = 1 if keep_only_best else self._beam_search.beam_size
-        predicted_indices = output_dict["predictions"]
+    def _get_predicted_tokens(self,
+                              predicted_indices: numpy.ndarray,
+                              batch_metadata: List[Any],
+                              n_best: int = None) -> List[Union[List[List[str]], List[str]]]:
         if not isinstance(predicted_indices, numpy.ndarray):
             predicted_indices = predicted_indices.detach().cpu().numpy()
         predicted_tokens: List[Union[List[List[str]], List[str]]] = []
-        for batch_item, metadata in zip(predicted_indices, output_dict["metadata"]):
+        for top_k_predictions, metadata in zip(predicted_indices, batch_metadata):
             batch_predicted_tokens: List[List[str]] = []
-            for indices in batch_item[:n_best]:
+            for indices in top_k_predictions[:n_best]:
                 tokens: List[str] = []
                 indices = list(indices)
                 if self._end_index in indices:
@@ -776,17 +772,29 @@ class CopyNet(Model):
                         token = self.vocab.get_token_from_index(index, self._target_namespace)
                     tokens.append(token)
                 batch_predicted_tokens.append(tokens)
-            if keep_only_best:
+            if n_best == 1:
                 predicted_tokens.append(batch_predicted_tokens[0])
             else:
                 predicted_tokens.append(batch_predicted_tokens)
+        return predicted_tokens
+
+    @overrides
+    def decode(self, output_dict: Dict[str, torch.Tensor]) -> Dict[str, Any]:
+        """
+        Finalize predictions.
+
+        After a beam search, the predicted indices correspond to tokens in the target vocabulary
+        OR tokens in source sentence. Here we gather the actual tokens corresponding to
+        the indices.
+        """
+        predicted_tokens = self._get_predicted_tokens(output_dict["predictions"],
+                                                      output_dict["metadata"])
         output_dict["predicted_tokens"] = predicted_tokens
         return output_dict
 
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         all_metrics: Dict[str, float] = {}
-        if self._metrics and not self.training:
-            for metric in self._metrics:
-                all_metrics.update(metric.get_metric(reset=reset))
+        if self._metric and not self.training:
+            all_metrics.update(self._metric.get_metric(reset=reset))
         return all_metrics
