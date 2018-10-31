@@ -2,7 +2,7 @@ from typing import List
 
 from allennlp.common.testing import AllenNlpTestCase
 
-from modules.data.tokenizers.word_splitter import NL2BashWordSplitter
+from nlpete.data.tokenizers.word_splitter import NL2BashWordSplitter
 
 
 class TestNL2BashWordSplitter(AllenNlpTestCase):

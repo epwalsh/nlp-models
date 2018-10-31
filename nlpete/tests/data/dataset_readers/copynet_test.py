@@ -9,16 +9,16 @@ from allennlp.data import DatasetReader
 from allennlp.data.tokenizers import Token
 from allennlp.data.vocabulary import Vocabulary, DEFAULT_OOV_TOKEN
 
-from modules.data.dataset_readers import CopyNetDatasetReader  # pylint: disable=unused-import
+from nlpete.data.dataset_readers import CopyNetDatasetReader  # pylint: disable=unused-import
 
 
 class TestCopyNetReader(AllenNlpTestCase):
 
     def setUp(self):
         super(TestCopyNetReader, self).setUp()
-        params = Params.from_file("modules/tests/fixtures/copynet/experiment.json")
+        params = Params.from_file("nlpete/tests/fixtures/copynet/experiment.json")
         self.reader = DatasetReader.from_params(params["dataset_reader"])
-        instances = self.reader.read("modules/tests/fixtures/copynet/copyover.tsv")
+        instances = self.reader.read("nlpete/tests/fixtures/copynet/copyover.tsv")
         self.instances = ensure_list(instances)
         self.vocab = Vocabulary.from_params(params=params["vocabulary"], instances=instances)
 
@@ -35,10 +35,12 @@ class TestCopyNetReader(AllenNlpTestCase):
         fields = self.instances[0].fields
         assert [t.text for t in fields["source_tokens"].tokens] == \
             ["@start@", "these", "tokens", "should", "be", "copied", "over", ":", "hello", "world", "@end@"]
-        assert [t.text for t in fields["target_tokens"].tokens] == \
-            ["@start@", "the", "tokens", "\"", "hello", "world", "\"", "were", "copied", "@end@"]
         assert fields["metadata"]["source_tokens"] == \
             ["these", "tokens", "should", "be", "copied", "over", ":", "hello", "world"]
+        assert [t.text for t in fields["target_tokens"].tokens] == \
+            ["@start@", "the", "tokens", "\"", "hello", "world", "\"", "were", "copied", "@end@"]
+        assert fields["metadata"]["target_tokens"] == \
+            ["the", "tokens", "\"", "hello", "world", "\"", "were", "copied"]
 
     def test_copy_indicator_array(self):
         copy_indicators = self.instances[0].fields["copy_indicators"]

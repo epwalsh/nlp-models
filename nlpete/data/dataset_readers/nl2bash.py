@@ -7,8 +7,8 @@ from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.tokenizers import Tokenizer, WordTokenizer
 from allennlp.data.token_indexers import TokenIndexer
 
-from modules.data.dataset_readers.copynet import CopyNetDatasetReader
-from modules.data.tokenizers.word_splitter import NL2BashWordSplitter
+from nlpete.data.dataset_readers.copynet import CopyNetDatasetReader
+from nlpete.data.tokenizers.word_splitter import NL2BashWordSplitter
 
 
 utilities = [  # pylint: disable=invalid-name

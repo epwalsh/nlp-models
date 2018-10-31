@@ -13,7 +13,7 @@ from allennlp.data.instance import Instance
 from allennlp.data.tokenizers import Token, Tokenizer, WordTokenizer
 from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
 
-from modules.data.fields import CopyMapField
+from nlpete.data.fields import CopyMapField
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -131,11 +131,11 @@ class CopyNetDatasetReader(DatasetReader):
         # in the target sentence (which will be the OOV symbol if there is no match).
         target_pointer_field = CopyMapField(tokenized_source[1:-1], self._target_namespace)
 
+        meta_fields = {"source_tokens": [x.text for x in tokenized_source[1:-1]]}
         fields_dict = {
                 "source_tokens": source_field,
                 "source_duplicates": source_duplicates_field,
                 "target_pointers": target_pointer_field,
-                "metadata": MetadataField({"source_tokens": [x.text for x in tokenized_source[1:-1]]})
         }
 
         if target_string is not None:
@@ -154,5 +154,8 @@ class CopyNetDatasetReader(DatasetReader):
 
             fields_dict["target_tokens"] = target_field
             fields_dict["copy_indicators"] = copy_indicator_field
+            meta_fields["target_tokens"] = [y.text for y in tokenized_target[1:-1]]
+
+        fields_dict["metadata"] = MetadataField(meta_fields)
 
         return Instance(fields_dict)

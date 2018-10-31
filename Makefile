@@ -1,5 +1,5 @@
 debug         = 0
-test          = modules
+test          = nlpete
 COVERAGE     := $(addprefix --cov=, $(test))
 PYTHONPATH    = allennlp
 DATADIR       = data
@@ -71,9 +71,12 @@ test : typecheck lint unit-test
 
 .PHONY: create-branch
 create-branch :
-ifeq ($(issue),)
-	$(error must supply 'issue' parameter)
-else
+ifneq ($(issue),)
 	git checkout -b ISSUE-$(issue)
 	git push --set-upstream origin ISSUE-$(issue)
+else ifneq ($(name),)
+	git checkout -b $(name)
+	git push --set-upstream origin $(name)
+else
+	$(error must supply 'issue' or 'name' parameter)
 endif
