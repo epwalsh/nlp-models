@@ -27,9 +27,9 @@ class TestCopyNetReader(AllenNlpTestCase):
 
     def test_instances(self):
         assert len(self.instances) == 2
-        assert set(self.instances[0].fields.keys()) == set(("source_tokens", "source_duplicates",
-                                                            "target_tokens", "copy_indicators",
-                                                            "target_pointers", "metadata"))
+        assert set(self.instances[0].fields.keys()) == set(("source_tokens", "source_to_source",
+                                                            "target_tokens", "target_to_source",
+                                                            "source_to_target", "metadata"))
 
     def test_tokens(self):
         fields = self.instances[0].fields
@@ -42,11 +42,11 @@ class TestCopyNetReader(AllenNlpTestCase):
         assert fields["metadata"]["target_tokens"] == \
             ["the", "tokens", "\"", "hello", "world", "\"", "were", "copied"]
 
-    def test_copy_indicator_array(self):
-        copy_indicators = self.instances[0].fields["copy_indicators"]
+    def test_target_to_source_array(self):
+        target_to_source = self.instances[0].fields["target_to_source"]
 
         # shape should be (target_length, source_length - 2)
-        assert copy_indicators.array.shape == (10, 9)
+        assert target_to_source.array.shape == (10, 9)
 
         check = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0],  # @START@
                           [0, 0, 0, 0, 0, 0, 0, 0, 0],  # the
@@ -58,12 +58,12 @@ class TestCopyNetReader(AllenNlpTestCase):
                           [0, 0, 0, 0, 0, 0, 0, 0, 0],  # were
                           [0, 0, 0, 0, 1, 0, 0, 0, 0],  # copied
                           [0, 0, 0, 0, 0, 0, 0, 0, 0]]) # @END@
-        np.testing.assert_equal(copy_indicators.array, check)
+        np.testing.assert_equal(target_to_source.array, check)
 
-    def test_target_pointers(self):
-        target_pointers_field = self.instances[0].fields["target_pointers"]
-        target_pointers_field.index(self.vocab)
-        tensor = target_pointers_field.as_tensor(target_pointers_field.get_padding_lengths())
+    def test_source_to_target(self):
+        source_to_target_field = self.instances[0].fields["source_to_target"]
+        source_to_target_field.index(self.vocab)
+        tensor = source_to_target_field.as_tensor(source_to_target_field.get_padding_lengths())
         check = np.array([self.vocab.get_token_index("these", "target_tokens"),
                           self.vocab.get_token_index("tokens", "target_tokens"),
                           self.vocab.get_token_index("should", "target_tokens"),
@@ -76,9 +76,9 @@ class TestCopyNetReader(AllenNlpTestCase):
         np.testing.assert_equal(tensor.numpy(), check)
         assert tensor[1].item() != self.vocab.get_token_index(DEFAULT_OOV_TOKEN, "target_tokens")
 
-    def test_source_duplicates_array(self):
+    def test_source_to_source_array(self):
         tokens = ["@START@", "a", "cat", "is", "a", "cat", "@END@"]
-        result = self.reader._create_source_duplicates_array([Token(x) for x in tokens])
+        result = self.reader._create_source_to_source_array([Token(x) for x in tokens])
         check = np.array([[1, 0, 0, 1, 0],  # a
                           [0, 1, 0, 0, 1],  # cat
                           [0, 0, 1, 0, 0],  # is

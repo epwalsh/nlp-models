@@ -50,11 +50,11 @@ class CopyNetTest(ModelTestCase):
         inputs = self.instances[0].as_tensor_dict()
         source_tokens = inputs["source_tokens"]
         target_tokens = inputs["target_tokens"]
-        copy_indicators = inputs["copy_indicators"]
+        target_to_source = inputs["target_to_source"]
 
         assert list(source_tokens["tokens"].size()) == [11]
         assert list(target_tokens["tokens"].size()) == [10]
-        assert list(copy_indicators.size()) == [10, 9]
+        assert list(target_to_source.size()) == [10, 9]
 
         assert target_tokens["tokens"][0] == self.model._start_index
         assert target_tokens["tokens"][4] == self.model._oov_index
@@ -89,9 +89,9 @@ class CopyNetTest(ModelTestCase):
                                       self.model._oov_index])
         # shape: (batch_size,)
 
-        copy_indicators = torch.tensor([[0, 1, 0],
-                                        [0, 0, 0],
-                                        [1, 0, 1]])
+        target_to_source = torch.tensor([[0, 1, 0],
+                                         [0, 0, 0],
+                                         [1, 0, 1]])
         # shape: (batch_size, trimmed_input_len)
 
         copy_mask = torch.tensor([[1.0, 1.0, 0.0],
@@ -124,7 +124,7 @@ class CopyNetTest(ModelTestCase):
         ll_actual, selective_weights_actual = self.model._get_ll_contrib(generation_scores,
                                                                          copy_scores,
                                                                          target_tokens,
-                                                                         copy_indicators,
+                                                                         target_to_source,
                                                                          copy_mask)
 
         np.testing.assert_almost_equal(ll_actual.data.numpy(),
@@ -143,11 +143,11 @@ class CopyNetTest(ModelTestCase):
                                          6,                       # copied AND generated.
                                          target_vocab_size + 1])  # only generated.
         # shape: (group_size, trimmed_source_length)
-        target_pointers = torch.tensor([[6, oov_index, oov_index],
-                                        [6, oov_index, 6],
-                                        [5, oov_index, oov_index]])
+        source_to_target = torch.tensor([[6, oov_index, oov_index],
+                                         [6, oov_index, 6],
+                                         [5, oov_index, oov_index]])
         # shape: (group_size, trimmed_source_length, trimmed_source_length)
-        source_duplicates = torch.tensor([
+        source_to_source = torch.tensor([
                 [[1, 0, 0],  # no duplicates.
                  [0, 1, 0],
                  [0, 0, 1]],
@@ -164,8 +164,8 @@ class CopyNetTest(ModelTestCase):
                                    [0.1, 0.1, 0.1]])
 
         state = {
-                "target_pointers": target_pointers,
-                "source_duplicates": source_duplicates,
+                "source_to_target": source_to_target,
+                "source_to_source": source_to_source,
                 "copy_probs": copy_probs,
         }
 
@@ -194,10 +194,10 @@ class CopyNetTest(ModelTestCase):
         assert oov_index not in [5, 6]
 
         # shape: (group_size, trimmed_source_length)
-        target_pointers = torch.tensor([[6, oov_index, oov_index],
-                                        [oov_index, 5, 5]])
+        source_to_target = torch.tensor([[6, oov_index, oov_index],
+                                         [oov_index, 5, 5]])
         # shape: (group_size, trimmed_source_length, trimmed_source_length)
-        source_duplicates = torch.tensor([
+        source_to_source = torch.tensor([
                 [[1, 0, 0],
                  [0, 1, 1],
                  [0, 1, 1]],
@@ -213,8 +213,8 @@ class CopyNetTest(ModelTestCase):
                                    [0.1, 0.1, 0.1]])
 
         state = {
-                "target_pointers": target_pointers,
-                "source_duplicates": source_duplicates,
+                "source_to_target": source_to_target,
+                "source_to_source": source_to_source,
         }
 
         final_probs = self.model._gather_final_probs(generation_probs, copy_probs, state)
