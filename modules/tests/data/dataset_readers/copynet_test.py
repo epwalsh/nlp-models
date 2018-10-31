@@ -35,10 +35,12 @@ class TestCopyNetReader(AllenNlpTestCase):
         fields = self.instances[0].fields
         assert [t.text for t in fields["source_tokens"].tokens] == \
             ["@start@", "these", "tokens", "should", "be", "copied", "over", ":", "hello", "world", "@end@"]
-        assert [t.text for t in fields["target_tokens"].tokens] == \
-            ["@start@", "the", "tokens", "\"", "hello", "world", "\"", "were", "copied", "@end@"]
         assert fields["metadata"]["source_tokens"] == \
             ["these", "tokens", "should", "be", "copied", "over", ":", "hello", "world"]
+        assert [t.text for t in fields["target_tokens"].tokens] == \
+            ["@start@", "the", "tokens", "\"", "hello", "world", "\"", "were", "copied", "@end@"]
+        assert fields["metadata"]["target_tokens"] == \
+            ["the", "tokens", "\"", "hello", "world", "\"", "were", "copied"]
 
     def test_copy_indicator_array(self):
         copy_indicators = self.instances[0].fields["copy_indicators"]
