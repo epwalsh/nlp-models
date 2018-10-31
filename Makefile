@@ -28,9 +28,7 @@ $(DATADIR)/%.tar.gz : phony-target
 		tar xzf $@ -C $(DATADIR); \
 	fi
 
-# Experiments depend on their datasets.
-.SECONDEXPANSION:
-$(EXPERIMENTDIR)/%.json : data/$$(shell dirname %.json).tar.gz
+$(EXPERIMENTDIR)/%.json : phony-target
 	./scripts/train.sh $@
 
 #

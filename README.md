@@ -34,12 +34,12 @@ and follow the prompts to specify the path to your model config and a serializat
 
 ## Experiments
 
-- **Greetings dataset with CopyNet:**
+- **[Greetings dataset with CopyNet](./experiments/greetings/copynet.json)**
 ```
 make data/greetings.tar.gz
 make experiments/greetings/copynet.json
 ```
-- **[NL2Bash with CopyNet](./experiments/nl2bash/copynet.json):**
+- **[NL2Bash with CopyNet](./experiments/nl2bash/copynet.json)**
 ```
 make data/nl2bash.tar.gz
 make experiments/nl2bash/copynet.json
