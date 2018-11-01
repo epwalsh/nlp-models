@@ -38,28 +38,28 @@ and follow the prompts to specify the path to your model config and a serializat
 > NOTE: All experiments are defined to run on GPU #0. So if you don't have a GPU available or want to use a different GPU, you'll need to modify the `trainer.cuda_device` field in the experiment's config file.
 
 - **[Greetings dataset with CopyNet](./experiments/greetings/copynet.json)**
-```
+```bash
 # Extract data.
 make data/greetings.tar.gz
-# Begin training.
+# Train model (~3-5 minutes on a single GTX 1070).
 make experiments/greetings/copynet.json
 ```
 - **[NL2Bash with CopyNet](./experiments/nl2bash/copynet.json)**
-```
+```bash
 # Extract data.
 make data/nl2bash.tar.gz
-# Begin training.
+# Train model.
 make experiments/nl2bash/copynet.json
 ```
 - **[WMT 2015 English to French with CopyNet](./experiments/wmt/en_fr_copynet.json)**
-```
+```bash
 # Download data from fast.ai (big file, may take around 10 minutes).
 ./scripts/data/pull_wmt.sh
 # Extract data (~1-2 minutes).
 make data/wmt.tar.gz
 # Combine English and French files into single file (~1-1.5 minutes).
 ./scripts/data/combine_wmt_en_fr.py
-# Begin training.
+# Train model (oof, this is gonna take a while).
 make experiments/wmt/en_fr_copynet.json
 ```
 
