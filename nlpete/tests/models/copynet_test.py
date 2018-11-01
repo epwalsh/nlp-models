@@ -232,3 +232,61 @@ class CopyNetTest(ModelTestCase):
                  0.1, 0.0, 0.0]                           # modified copy scores
         ])
         np.testing.assert_array_almost_equal(final_probs.numpy(), final_probs_check)
+
+    def test_gather_extended_gold_tokens(self):
+        vocab_size = self.model._target_vocab_size
+        end_index = self.model._end_index
+        pad_index = self.model._pad_index
+        oov_index = self.model._oov_index
+        tok_index = 6  # some other arbitrary token
+        assert tok_index not in [end_index, pad_index, oov_index]
+        # shape: (batch_size, target_sequence_length)
+        target_tokens = torch.tensor([[oov_index, tok_index, end_index, pad_index],
+                                      [tok_index, oov_index, tok_index, end_index]])
+        # shape: (batch_size, target_sequence_length, trimmed_source_length)
+        target_to_source = torch.tensor([
+                [[0, 0, 0, 0],  # oov but not copied
+                 [0, 0, 0, 0],  # not oov and not copied
+                 [0, 0, 0, 0],  # not copied
+                 [0, 0, 0, 0]], # not copied
+                [[0, 1, 0, 0],  # not oov and copied
+                 [1, 0, 1, 0],  # oov and copied
+                 [0, 0, 0, 0],  # not copied
+                 [0, 0, 0, 0]]  # not copied
+        ])
+        # shape: (batch_size, target_sequence_length)
+        result = self.model._gather_extended_gold_tokens(target_tokens, target_to_source)
+        # shape: (batch_size, target_sequence_length)
+        check = np.array([[oov_index, tok_index, end_index, pad_index],
+                          [tok_index, vocab_size, tok_index, end_index]])
+        np.testing.assert_array_equal(result.numpy(), check)
+
+    def test_get_predicted_tokens(self):
+        tok_index = self.vocab.get_token_index("tokens", self.model._target_namespace)
+        end_index = self.model._end_index
+        vocab_size = self.model._target_vocab_size
+
+        # shape: (batch_size, beam_size, max_predicted_length)
+        predicted_indices = np.array([
+                [[tok_index, vocab_size, vocab_size + 1, end_index],
+                 [tok_index, tok_index, tok_index, tok_index]],
+                [[tok_index, tok_index, tok_index, end_index],
+                 [tok_index, vocab_size + 1, end_index, end_index]],
+        ])
+
+        batch_metadata = [
+                {"source_tokens": ["hello", "world"]},
+                {"source_tokens": ["copynet", "is", "cool"]}
+        ]
+
+        predicted_tokens = self.model._get_predicted_tokens(predicted_indices, batch_metadata)
+        assert len(predicted_tokens) == 2
+        assert len(predicted_tokens[0]) == 2
+        assert len(predicted_tokens[1]) == 2
+        assert predicted_tokens[0][0] == ["tokens", "hello", "world"]
+        assert predicted_tokens[0][1] == ["tokens", "tokens", "tokens", "tokens"]
+
+        predicted_tokens = self.model._get_predicted_tokens(predicted_indices, batch_metadata, n_best=1)
+        assert len(predicted_tokens) == 2
+        assert predicted_tokens[0] == ["tokens", "hello", "world"]
+        assert predicted_tokens[1] == ["tokens", "tokens", "tokens"]
