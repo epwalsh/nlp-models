@@ -25,7 +25,7 @@ endif
 $(DATADIR)/%.tar.gz : phony-target
 	@if ! [ -d $(patsubst %.tar.gz,%,$@) ]; then \
 		echo "Extracting $@ to $(patsubst %.tar.gz,%,$@)"; \
-		tar xzf $@ -C $(DATADIR); \
+		mkdir -p $(patsubst %.tar.gz,%,$@) && tar xzfv $@ -C $(patsubst %.tar.gz,%,$@) --strip-components 1; \
 	fi
 
 $(EXPERIMENTDIR)/%.json : phony-target

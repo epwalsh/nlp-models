@@ -4,3 +4,6 @@
 # But not these files.
 !.gitignore
 !*.tar.gz
+
+# But also ignore these files.
+wmt.tar.gz
