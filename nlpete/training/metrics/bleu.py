@@ -11,14 +11,21 @@ from allennlp.training.metrics import Metric
 @Metric.register("bleu")
 class BLEU(Metric):
     """
-    Bilingual Evaluation Understudy (BLEU) is a common metric used for evaluating
-    the quality of machine translations against a set of reference translations.
-    This implementation only considers a reference set of size 1.
+    Bilingual Evaluation Understudy (BLEU).
+
+    BLEU is a common metric used for evaluating the quality of machine translations
+    against a set of reference translations. See Papineni et. al.,
+    "BLEU: a method for automatic evaluation of machine translation", 2002.
 
     Parameters
     ----------
     ngram_weights : ``Iterable[float]``, optional (default = (0.25, 0.25, 0.25, 0.25))
         Weights to assign to scores for each ngram size.
+
+    Notes
+    -----
+    This implementation only considers a reference set of size 1, i.e. a single
+    gold target sequence for each predicted sequence.
     """
 
     def __init__(self,
@@ -37,7 +44,7 @@ class BLEU(Metric):
         self._reference_lengths = 0
 
     @staticmethod
-    def _ngrams(tensor: torch.Tensor,
+    def _ngrams(tensor: torch.LongTensor,
                 ngram_size: int,
                 exclude_indices: Set[int] = None) -> Dict[Tuple[int, ...], int]:
         ngram_counts: Dict[Tuple[int, ...], int] = Counter()
@@ -54,8 +61,8 @@ class BLEU(Metric):
         return ngram_counts
 
     def _get_modified_precision(self,
-                                predicted_tokens: torch.Tensor,
-                                reference_tokens: torch.Tensor,
+                                predicted_tokens: torch.LongTensor,
+                                reference_tokens: torch.LongTensor,
                                 ngram_size: int,
                                 exclude_indices: Set[int] = None) -> Tuple[int, int]:
         clipped_matches = 0
@@ -78,7 +85,7 @@ class BLEU(Metric):
         return math.exp(1.0 - self._reference_lengths / self._prediction_lengths)
 
     @staticmethod
-    def _get_valid_tokens_mask(tensor: torch.Tensor, exclude_indices: Set[int]):
+    def _get_valid_tokens_mask(tensor: torch.LongTensor, exclude_indices: Set[int]) -> torch.ByteTensor:
         valid_tokens_mask = torch.ones(tensor.size(), dtype=torch.uint8)
         for index in exclude_indices:
             valid_tokens_mask = valid_tokens_mask & (tensor != index)
@@ -86,8 +93,8 @@ class BLEU(Metric):
 
     @overrides
     def __call__(self,
-                 predictions: torch.Tensor,
-                 gold_targets: torch.Tensor,
+                 predictions: torch.LongTensor,
+                 gold_targets: torch.LongTensor,
                  exclude_indices: Set[int] = None) -> None:
         """
         Parameters
