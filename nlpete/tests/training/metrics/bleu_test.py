@@ -1,8 +1,10 @@
-# pylint: disable=protected-access
+# pylint: disable=protected-access,not-callable
 
-import math
+from collections import Counter
 
-from numpy.testing import assert_almost_equal
+import numpy as np
+import torch
+
 from allennlp.common.testing import AllenNlpTestCase
 
 from nlpete.training.metrics import BLEU
@@ -14,21 +16,47 @@ class BleuTest(AllenNlpTestCase):
         super().setUp()
         self.metric = BLEU(ngram_weights=(0.5, 0.5))
 
-    def test_score(self):
-        self.metric.reset()
-        self.metric(["this a test sentence".split()], ["this is a test sentence".split()])
-        assert self.metric._precision_matches == {
-                1: 4,
-                2: 2,
+    def test_get_valid_tokens_mask(self):
+        tensor = torch.tensor([[1, 2, 3, 0],
+                               [0, 1, 1, 0]])
+        result = self.metric._get_valid_tokens_mask(tensor, set((0,)))
+        result = result.long().numpy()
+        check = np.array([[1, 1, 1, 0],
+                          [0, 1, 1, 0]])
+        np.testing.assert_array_equal(result, check)
+
+    def test_ngrams(self):
+        tensor = torch.tensor([[1, 2, 3, 0],
+                               [1, 1, 2, 1]])
+
+        # Unigrams.
+        counts = Counter(self.metric._ngrams(tensor, 1, set((0,))))
+        unigram_check = {
+                (1,): 4,
+                (2,): 2,
+                (3,): 1,
         }
-        assert self.metric._precision_totals == {
-                1: 4,
-                2: 3,
+        assert counts == unigram_check
+
+        # Bigrams.
+        counts = Counter(self.metric._ngrams(tensor, 2, set((0,))))
+        bigram_check = {
+                (1, 2): 2,
+                (2, 3): 1,
+                (1, 1): 1,
+                (2, 1): 1
         }
-        assert self.metric._prediction_lengths == 4
-        assert self.metric._reference_lengths == 5
-        bleu = self.metric.get_metric(reset=True)["BLEU"]
-        bleu_check = math.exp(1.0 - 5 / 4 +  # brevity penalty
-                              0.5 * (math.log(4) - math.log(4)) +  # 1-gram score
-                              0.5 * (math.log(2) - math.log(3)))   # 2-gram score
-        assert_almost_equal(bleu, bleu_check)
+        assert counts == bigram_check
+
+        # Trigrams.
+        counts = Counter(self.metric._ngrams(tensor, 3, set((0,))))
+        trigram_check = {
+                (1, 2, 3): 1,
+                (1, 1, 2): 1,
+                (1, 2, 1): 1
+        }
+        assert counts == trigram_check
+
+        # ngram size too big, no ngrams produced.
+        counts = Counter(self.metric._ngrams(tensor, 5, set((0,))))
+        assert counts == {}

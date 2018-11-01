@@ -64,10 +64,10 @@ class CopyNet(Model):
     target_namespace : ``str``, optional (default = 'target_tokens')
         The namespace for the target vocabulary.
     metric : ``Metric``, optional (default = BLEU)
-        A metrics to track on a validation set. Note that this metrics must accept
-        a list of predicted tokens (as strings) and a corresponding list of
-        gold tokens (as strings). Also, the `Metric.get_metrics()` method is expected
-        to output a dict, as opposed to a float.
+        A metrics to track on a validation set. Note that this metric must accept
+        three arguments when called: a batched tensor of predicted token indices, a batched
+        tensor of gold token indices, and a set of token indices to exclude when
+        calculating n-grams (usually should be the start index, end index, and pad index).
     """
 
     def __init__(self,
@@ -91,6 +91,7 @@ class CopyNet(Model):
         self._start_index = self.vocab.get_token_index(START_SYMBOL, self._target_namespace)
         self._end_index = self.vocab.get_token_index(END_SYMBOL, self._target_namespace)
         self._oov_index = self.vocab.get_token_index(self.vocab._oov_token, self._target_namespace)  # pylint: disable=protected-access
+        self._pad_index = self.vocab.get_token_index(self.vocab._padding_token, self._target_namespace)  # pylint: disable=protected-access
         self._copy_index = self.vocab.get_token_index(copy_token, self._target_namespace)
         if self._copy_index == self._oov_index:
             raise ConfigurationError(f"Special copy token {copy_token} missing from target vocab namespace. "
@@ -166,7 +167,7 @@ class CopyNet(Model):
         target_tokens : ``Dict[str, torch.LongTensor]``, optional (default = None)
             Output of `Textfield.as_array()` applied on target `TextField`. We assume that the
             target tokens are also represented as a `TextField`.
-        target_to_source : ``Dict[str, torch.LongTensor]``, optional (default = None)
+        target_to_source : ``torch.Tensor``, optional (default = None)
             A sparse tensor of shape `(batch_size, target_sequence_length, source_sentence_length - 2)` that
             indicates which tokens in the source sentence match each token in the target sequence.
             The last dimension is `source_sentence_length - 2` because we exclude the
@@ -192,13 +193,52 @@ class CopyNet(Model):
             predictions = self._forward_beam_search(state)
             output_dict.update(predictions)
             if self._metric and target_tokens:
-                predicted_tokens = self._get_predicted_tokens(output_dict["predictions"],
-                                                              output_dict["metadata"],
-                                                              n_best=1)
-                reference_tokens = [x["target_tokens"] for x in metadata]
-                self._metric(predicted_tokens, reference_tokens)
+                # shape: (batch_size, beam_size, max_sequence_length)
+                top_k_predictions = output_dict["predictions"]
+                # shape: (batch_size, max_predicted_sequence_length)
+                best_predictions = top_k_predictions[:, 0, :]
+                # shape: (batch_size, target_sequence_length)
+                gold_tokens = self._gather_extended_gold_tokens(target_tokens["tokens"], target_to_source)
+                self._metric(best_predictions, gold_tokens,
+                             (self._pad_index, self._end_index, self._start_index))
 
         return output_dict
+
+    def _gather_extended_gold_tokens(self,
+                                     target_tokens: torch.LongTensor,
+                                     target_to_source: torch.Tensor) -> torch.LongTensor:
+        """
+        Modify the gold target tokens relative to the extended vocabulary.
+
+        For gold targets that are OOV but were copied from the source, the OOV index
+        will be changed to the index of the first occurence in the source sentence,
+        offset by the size of the target vocabulary.
+
+        Parameters
+        ----------
+        target_tokens : ``torch.LongTensor``
+            Shape: `(batch_size, target_sequence_length)`.
+        target_to_source : ``torch.Tensor``
+            Shape: `(batch_size, target_sequence_length, trimmed_source_length)`.
+
+        Returns
+        -------
+        torch.Tensor
+            Modified `target_tokens` with OOV indices replaced by offset index
+            of first match in source sentence.
+        """
+        # Only change indices for tokens that were OOV in target vocab but copied from source.
+        # shape: (batch_size, target_sequence_length)
+        oov = (target_tokens == self._oov_index)
+        # shape: (batch_size, target_sequence_length)
+        copied = (target_to_source.sum(-1) > 0)
+        # shape: (batch_size, target_sequence_length)
+        mask = (oov & copied).long()
+        # shape: (batch_size, target_sequence_length)
+        _, first_match = target_to_source.max(-1)
+        # shape: (batch_size, target_sequence_length)
+        new_target_tokens = target_tokens * (1 - mask) + (first_match.long() + self._target_vocab_size) * mask
+        return new_target_tokens
 
     def _init_decoder_state(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """

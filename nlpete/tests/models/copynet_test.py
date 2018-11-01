@@ -232,3 +232,31 @@ class CopyNetTest(ModelTestCase):
                  0.1, 0.0, 0.0]                           # modified copy scores
         ])
         np.testing.assert_array_almost_equal(final_probs.numpy(), final_probs_check)
+
+    def test_gather_extended_gold_tokens(self):
+        vocab_size = self.model._target_vocab_size
+        end_index = self.model._end_index
+        pad_index = self.model._pad_index
+        oov_index = self.model._oov_index
+        tok_index = 6  # some other arbitrary token
+        assert tok_index not in [end_index, pad_index, oov_index]
+        # shape: (batch_size, target_sequence_length)
+        target_tokens = torch.tensor([[oov_index, tok_index, end_index, pad_index],
+                                      [tok_index, oov_index, tok_index, end_index]])
+        # shape: (batch_size, target_sequence_length, trimmed_source_length)
+        target_to_source = torch.tensor([
+                [[0, 0, 0, 0],  # oov but not copied
+                 [0, 0, 0, 0],  # not oov and not copied
+                 [0, 0, 0, 0],  # not copied
+                 [0, 0, 0, 0]], # not copied
+                [[0, 1, 0, 0],  # not oov and copied
+                 [1, 0, 1, 0],  # oov and copied
+                 [0, 0, 0, 0],  # not copied
+                 [0, 0, 0, 0]]  # not copied
+        ])
+        # shape: (batch_size, target_sequence_length)
+        result = self.model._gather_extended_gold_tokens(target_tokens, target_to_source)
+        # shape: (batch_size, target_sequence_length)
+        check = np.array([[oov_index, tok_index, end_index, pad_index],
+                          [tok_index, vocab_size, tok_index, end_index]])
+        np.testing.assert_array_equal(result.numpy(), check)

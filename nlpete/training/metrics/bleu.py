@@ -1,9 +1,9 @@
 from collections import Counter
 import math
-from typing import Iterable, Tuple, Dict, List
+from typing import Iterable, Tuple, Dict, List, Set, Generator
 
 from overrides import overrides
-from nltk import ngrams
+import torch
 
 from allennlp.training.metrics import Metric
 
@@ -32,11 +32,28 @@ class BLEU(Metric):
         self._reference_lengths = 0
 
     @staticmethod
-    def _get_modified_precision(predicted_tokens: List[str],  # pylint: disable=invalid-name
+    def _ngrams(tensor: torch.Tensor,
+                ngram_size: int,
+                exclude_indices: Set[int] = None) -> Generator[Tuple[int, ...], None, None]:
+        start_upper_bound = max((min((ngram_size, tensor.size(-1) - 1)), 1))
+        start_positions = range(start_upper_bound)
+        for start in start_positions:
+            for tensor_slice in tensor[:, start:].split(ngram_size, dim=-1):
+                if tensor_slice.size(-1) < ngram_size:
+                    break
+                for row in tensor_slice:
+                    ngram = tuple(x.item() for x in row)
+                    if exclude_indices and any(x in ngram for x in exclude_indices):
+                        continue
+                    yield ngram
+
+    def _get_modified_precision(self,
+                                predicted_tokens: List[str],
                                 reference_tokens: List[str],
-                                n: int) -> Tuple[int, int]:
-        predicted_ngram_counts = Counter(ngrams(predicted_tokens, n))
-        reference_ngram_counts = Counter(ngrams(reference_tokens, n))
+                                ngram_size: int,
+                                exclude_indices: Set[int] = None) -> Tuple[int, int]:
+        predicted_ngram_counts = Counter(self._ngrams(predicted_tokens, ngram_size, exclude_indices))
+        reference_ngram_counts = Counter(self._ngrams(reference_tokens, ngram_size, exclude_indices))
         clipped_matches = {ngram: min(count, reference_ngram_counts[ngram])
                            for ngram, count in predicted_ngram_counts.items()}
         return sum(clipped_matches.values()), sum(predicted_ngram_counts.values())
@@ -48,30 +65,45 @@ class BLEU(Metric):
             return 0.0
         return math.exp(1.0 - self._reference_lengths / self._prediction_lengths)
 
+    @staticmethod
+    def _get_valid_tokens_mask(tensor: torch.Tensor, exclude_indices: Set[int]):
+        valid_tokens_mask = torch.ones(tensor.size(), dtype=torch.uint8)
+        for index in exclude_indices:
+            valid_tokens_mask = valid_tokens_mask & (tensor != index)
+        return valid_tokens_mask
+
     @overrides
     def __call__(self,
-                 predictions: List[List[str]],
-                 references: List[List[str]]) -> None:
+                 predictions: torch.Tensor,
+                 gold_targets: torch.Tensor,
+                 exclude_indices: Set[int] = None) -> None:
         """
         Parameters
         ----------
-        predictions : ``List[List[str]]``
-            Batched predicted tokens.
-        references : ``List[List[str]]``
-            Batched reference translations.
+        predictions : ``torch.LongTensor``, required
+            Batched predicted tokens of shape `(batch_size, max_sequence_length)`.
+        references : ``torch.LongTensor``, required
+            Batched reference (gold) translations with shape `(batch_size, max_gold_sequence_length)`.
+        exclude_indices : ``Set[int]``, optional (default = None)
+            Indices to exclude when calculating ngrams.
 
         Returns
         -------
         None
         """
-        for predicted_tokens, reference_tokens in zip(predictions, references):
-            for n, _ in enumerate(self._ngram_weights, start=1):  # pylint: disable=invalid-name
-                precision_matches, precision_totals = self._get_modified_precision(
-                        predicted_tokens, reference_tokens, n)
-                self._precision_matches[n] += precision_matches
-                self._precision_totals[n] += precision_totals
-            self._prediction_lengths += len(predicted_tokens)
-            self._reference_lengths += len(reference_tokens)
+        for ngram_size, _ in enumerate(self._ngram_weights, start=1):
+            precision_matches, precision_totals = self._get_modified_precision(
+                    predictions, gold_targets, ngram_size, exclude_indices)
+            self._precision_matches[ngram_size] += precision_matches
+            self._precision_totals[ngram_size] += precision_totals
+        if not exclude_indices:
+            self._prediction_lengths += predictions.size(-1)
+            self._reference_lengths += gold_targets.size(-1)
+        else:
+            valid_predictions_mask = self._get_valid_tokens_mask(predictions, exclude_indices)
+            self._prediction_lengths += valid_predictions_mask.sum(-1).max().item()
+            valid_gold_targets_mask = self._get_valid_tokens_mask(gold_targets, exclude_indices)
+            self._reference_lengths += valid_gold_targets_mask.sum(-1).max().item()
 
     @overrides
     def get_metric(self, reset: bool = False) -> Dict[str, float]:
