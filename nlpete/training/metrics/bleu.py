@@ -1,6 +1,6 @@
 from collections import Counter
 import math
-from typing import Iterable, Tuple, Dict, List, Set, Generator
+from typing import Iterable, Tuple, Dict, Set
 
 from overrides import overrides
 import torch
@@ -14,6 +14,11 @@ class BLEU(Metric):
     Bilingual Evaluation Understudy (BLEU) is a common metric used for evaluating
     the quality of machine translations against a set of reference translations.
     This implementation only considers a reference set of size 1.
+
+    Parameters
+    ----------
+    ngram_weights : ``Iterable[float]``, optional (default = (0.25, 0.25, 0.25, 0.25))
+        Weights to assign to scores for each ngram size.
     """
 
     def __init__(self,
@@ -34,29 +39,36 @@ class BLEU(Metric):
     @staticmethod
     def _ngrams(tensor: torch.Tensor,
                 ngram_size: int,
-                exclude_indices: Set[int] = None) -> Generator[Tuple[int, ...], None, None]:
-        start_upper_bound = max((min((ngram_size, tensor.size(-1) - 1)), 1))
-        start_positions = range(start_upper_bound)
-        for start in start_positions:
-            for tensor_slice in tensor[:, start:].split(ngram_size, dim=-1):
+                exclude_indices: Set[int] = None) -> Dict[Tuple[int, ...], int]:
+        ngram_counts: Dict[Tuple[int, ...], int] = Counter()
+        if ngram_size > tensor.size(-1):
+            return ngram_counts
+        for start_position in range(ngram_size):
+            for tensor_slice in tensor[start_position:].split(ngram_size, dim=-1):
                 if tensor_slice.size(-1) < ngram_size:
                     break
-                for row in tensor_slice:
-                    ngram = tuple(x.item() for x in row)
-                    if exclude_indices and any(x in ngram for x in exclude_indices):
-                        continue
-                    yield ngram
+                ngram = tuple(x.item() for x in tensor_slice)
+                if exclude_indices and any(x in ngram for x in exclude_indices):
+                    continue
+                ngram_counts[ngram] += 1
+        return ngram_counts
 
     def _get_modified_precision(self,
-                                predicted_tokens: List[str],
-                                reference_tokens: List[str],
+                                predicted_tokens: torch.Tensor,
+                                reference_tokens: torch.Tensor,
                                 ngram_size: int,
                                 exclude_indices: Set[int] = None) -> Tuple[int, int]:
-        predicted_ngram_counts = Counter(self._ngrams(predicted_tokens, ngram_size, exclude_indices))
-        reference_ngram_counts = Counter(self._ngrams(reference_tokens, ngram_size, exclude_indices))
-        clipped_matches = {ngram: min(count, reference_ngram_counts[ngram])
-                           for ngram, count in predicted_ngram_counts.items()}
-        return sum(clipped_matches.values()), sum(predicted_ngram_counts.values())
+        clipped_matches = 0
+        total_predicted = 0
+        for batch_num in range(predicted_tokens.size(0)):
+            predicted_row = predicted_tokens[batch_num, :]
+            reference_row = reference_tokens[batch_num, :]
+            predicted_ngram_counts = self._ngrams(predicted_row, ngram_size, exclude_indices)
+            reference_ngram_counts = self._ngrams(reference_row, ngram_size, exclude_indices)
+            for ngram, count in predicted_ngram_counts.items():
+                clipped_matches += min(count, reference_ngram_counts[ngram])
+                total_predicted += count
+        return clipped_matches, total_predicted
 
     def _get_brevity_penalty(self) -> float:
         if self._prediction_lengths > self._reference_lengths:
@@ -85,25 +97,27 @@ class BLEU(Metric):
         references : ``torch.LongTensor``, required
             Batched reference (gold) translations with shape `(batch_size, max_gold_sequence_length)`.
         exclude_indices : ``Set[int]``, optional (default = None)
-            Indices to exclude when calculating ngrams.
+            Indices to exclude when calculating ngrams. This should usually include
+            the indices of the start, end, and pad tokens.
 
         Returns
         -------
         None
         """
+        predictions, gold_targets = self.unwrap_to_tensors(predictions, gold_targets)
         for ngram_size, _ in enumerate(self._ngram_weights, start=1):
             precision_matches, precision_totals = self._get_modified_precision(
                     predictions, gold_targets, ngram_size, exclude_indices)
             self._precision_matches[ngram_size] += precision_matches
             self._precision_totals[ngram_size] += precision_totals
         if not exclude_indices:
-            self._prediction_lengths += predictions.size(-1)
-            self._reference_lengths += gold_targets.size(-1)
+            self._prediction_lengths += predictions.size(0) * predictions.size(1)
+            self._reference_lengths += gold_targets.size(0) * gold_targets.size(1)
         else:
             valid_predictions_mask = self._get_valid_tokens_mask(predictions, exclude_indices)
-            self._prediction_lengths += valid_predictions_mask.sum(-1).max().item()
+            self._prediction_lengths += valid_predictions_mask.sum().item()
             valid_gold_targets_mask = self._get_valid_tokens_mask(gold_targets, exclude_indices)
-            self._reference_lengths += valid_gold_targets_mask.sum(-1).max().item()
+            self._reference_lengths += valid_gold_targets_mask.sum().item()
 
     @overrides
     def get_metric(self, reset: bool = False) -> Dict[str, float]:
