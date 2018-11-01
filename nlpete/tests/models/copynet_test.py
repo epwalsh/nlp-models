@@ -260,3 +260,33 @@ class CopyNetTest(ModelTestCase):
         check = np.array([[oov_index, tok_index, end_index, pad_index],
                           [tok_index, vocab_size, tok_index, end_index]])
         np.testing.assert_array_equal(result.numpy(), check)
+
+    def test_get_predicted_tokens(self):
+        tok_index = self.vocab.get_token_index("tokens", self.model._target_namespace)
+        end_index = self.model._end_index
+        vocab_size = self.model._target_vocab_size
+
+        # shape: (batch_size, beam_size, max_predicted_length)
+        predicted_indices = np.array([
+                [[tok_index, vocab_size, vocab_size + 1, end_index],
+                 [tok_index, tok_index, tok_index, tok_index]],
+                [[tok_index, tok_index, tok_index, end_index],
+                 [tok_index, vocab_size + 1, end_index, end_index]],
+        ])
+
+        batch_metadata = [
+                {"source_tokens": ["hello", "world"]},
+                {"source_tokens": ["copynet", "is", "cool"]}
+        ]
+
+        predicted_tokens = self.model._get_predicted_tokens(predicted_indices, batch_metadata)
+        assert len(predicted_tokens) == 2
+        assert len(predicted_tokens[0]) == 2
+        assert len(predicted_tokens[1]) == 2
+        assert predicted_tokens[0][0] == ["tokens", "hello", "world"]
+        assert predicted_tokens[0][1] == ["tokens", "tokens", "tokens", "tokens"]
+
+        predicted_tokens = self.model._get_predicted_tokens(predicted_indices, batch_metadata, n_best=1)
+        assert len(predicted_tokens) == 2
+        assert predicted_tokens[0] == ["tokens", "hello", "world"]
+        assert predicted_tokens[1] == ["tokens", "tokens", "tokens"]
