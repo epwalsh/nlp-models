@@ -53,12 +53,8 @@ make experiments/nl2bash/copynet.json
 ```
 - **[WMT 2015 English to French with CopyNet](./experiments/wmt/en_fr_copynet.json)**
 ```bash
-# Download data from fast.ai (big file, may take around 10 minutes).
+# Download, extract, and preprocess data (big file, may take around 10 minutes).
 ./scripts/data/pull_wmt.sh
-# Extract data (~1-2 minutes).
-make data/wmt.tar.gz
-# Combine English and French files into single file (~1-1.5 minutes).
-./scripts/data/combine_wmt_en_fr.py
 # Train model (oof, this is gonna take a while).
 make experiments/wmt/en_fr_copynet.json
 ```

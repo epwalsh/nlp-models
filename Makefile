@@ -28,6 +28,9 @@ $(DATADIR)/%.tar.gz : phony-target
 		mkdir -p $(patsubst %.tar.gz,%,$@) && tar xzfv $@ -C $(patsubst %.tar.gz,%,$@) --strip-components 1; \
 	fi
 
+$(EXPERIMENTDIR)/wmt/en_fr_copynet.json : phony-target
+	./scripts/train.sh $@
+
 $(EXPERIMENTDIR)/%.json : phony-target
 	./scripts/train.sh $@
 
