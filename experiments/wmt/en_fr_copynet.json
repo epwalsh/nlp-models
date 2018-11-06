@@ -1,0 +1,95 @@
+{
+  "dataset_reader": {
+    "target_namespace": "target_tokens",
+    "type": "copynet",
+    "source_token_indexers": {
+      "tokens": {
+        "type": "single_id",
+        "namespace": "source_tokens"
+      },
+      "token_characters": {
+        "type": "characters"
+      }
+    },
+    "target_token_indexers": {
+      "tokens": {
+        "namespace": "target_tokens"
+      }
+    }
+  },
+  "vocabulary": {
+    "directory_path": "data/wmt/vocabulary"
+  },
+  "datasets_for_vocab_creation": [],
+  "train_data_path": "data/wmt/english_to_french_train.tsv",
+  "validation_data_path": "data/wmt/english_to_french_dev.tsv",
+  "model": {
+    "type": "copynet",
+    "source_embedder": {
+      "tokens": {
+        "type": "embedding",
+        "vocab_namespace": "source_tokens",
+        "embedding_dim": 50,
+        "pretrained_file": "https://s3-us-west-2.amazonaws.com/allennlp/datasets/glove/glove.6B.50d.txt.gz",
+        "trainable": true
+      },
+      "token_characters": {
+        "type": "character_encoding",
+        "embedding": {
+          "embedding_dim": 15
+        },
+        "encoder": {
+          "type": "lstm",
+          "input_size": 15,
+          "hidden_size": 25,
+          "num_layers": 2,
+          "dropout": 0,
+          "bidirectional": true
+        }
+      }
+    },
+    "encoder": {
+      "type": "lstm",
+      "input_size": 100,
+      "hidden_size": 200,
+      "num_layers": 2,
+      "dropout": 0,
+      "bidirectional": true
+    },
+    "attention": {
+      "type": "bilinear",
+      "vector_dim": 400,
+      "matrix_dim": 400
+    },
+    "target_embedding_dim": 50,
+    "beam_size": 5,
+    "max_decoding_steps": 50,
+    "metric": {
+      "type": "bleu"
+    }
+  },
+  "iterator": {
+    "type": "bucket",
+    "padding_noise": 0.0,
+    "batch_size" : 32,
+    "sorting_keys": [["source_tokens", "num_tokens"]],
+    "instances_per_epoch": 100000,
+    "max_instances_in_memory": 10000
+  },
+  "trainer": {
+    "optimizer": {
+      "type": "sgd",
+      "lr": 0.01
+    },
+    "learning_rate_scheduler": {
+      "type": "cosine",
+      "t_initial": 5,
+      "t_mul": 1.5,
+      "eta_mul": 0.9
+    },
+    "num_epochs": 80,
+    "cuda_device": 0,
+    "should_log_learning_rate": true,
+    "should_log_parameter_statistics": false
+  }
+}
