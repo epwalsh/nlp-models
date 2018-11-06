@@ -41,22 +41,32 @@ and follow the prompts to specify the path to your model config and a serializat
 ```bash
 # Extract data.
 make data/greetings.tar.gz
-# Train model (~3-5 minutes on a single GTX 1070).
-make experiments/greetings/copynet.json
+
+# Train model. When prompted for the model file, enter "experiments/greetings/copynet.json".
+# (~3-5 minutes on a single GTX 1070)
+make train
 ```
 - **[NL2Bash with CopyNet](./experiments/nl2bash/copynet.json)**
 ```bash
 # Extract data.
 make data/nl2bash.tar.gz
-# Train model.
-make experiments/nl2bash/copynet.json
+
+# Train model. When prompted for the model file, enter "experiments/nl2bash/copynet.json".
+make train
 ```
 - **[WMT 2015 English to French with CopyNet](./experiments/wmt/en_fr_copynet.json)**
 ```bash
 # Download, extract, and preprocess data (big file, may take around 10 minutes).
 ./scripts/data/pull_wmt.sh
-# Train model (oof, this is gonna take a while).
-make experiments/wmt/en_fr_copynet.json
+
+# Create vocab. When prompted for the model file, enter "experiments/wmt/en_fr_vocab.json",
+# and when prompted for the serialization directory, enter "data/wmt".
+make vocab
+
+# Train model. When prompted for the model file, enter "experiments/wmt/en_fr_copynet.json".
+# NOTE: this is a different model file than used for the vocab creation!
+# (oof, this is gonna take a while).
+make train
 ```
 
 ## TODO

@@ -14,10 +14,14 @@ EXPERIMENTS  := $(wildcard $(EXPERIMENTDIR)/**/*.json)
 .PHONY : train
 train :
 ifeq ($(debug),0)
-	./scripts/train.sh
+	./scripts/training/train.sh
 else
 	CUDA_LAUNCH_BLOCKING=1 ./scripts/train.sh
 endif
+
+.PHONY : vocab
+vocab :
+	./scripts/training/make_vocab.sh
 
 # Need this to force targets to build, even when the target file exists.
 .PHONY : phony-target
@@ -28,11 +32,8 @@ $(DATADIR)/%.tar.gz : phony-target
 		mkdir -p $(patsubst %.tar.gz,%,$@) && tar xzfv $@ -C $(patsubst %.tar.gz,%,$@) --strip-components 1; \
 	fi
 
-$(EXPERIMENTDIR)/wmt/en_fr_copynet.json : phony-target
-	./scripts/train.sh $@
-
 $(EXPERIMENTDIR)/%.json : phony-target
-	./scripts/train.sh $@
+	./scripts/training/train.sh $@
 
 #
 # Testing commands.

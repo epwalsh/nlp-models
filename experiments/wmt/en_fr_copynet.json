@@ -18,14 +18,9 @@
     }
   },
   "vocabulary": {
-    "min_count": {
-      "source_tokens": 4,
-      "target_tokens": 4
-    },
-    "tokens_to_add": {
-        "target_tokens": ["@COPY@"]
-    }
+    "directory_path": "data/wmt/vocabulary"
   },
+  "datasets_for_vocab_creation": [],
   "train_data_path": "data/wmt/english_to_french_train.tsv",
   "validation_data_path": "data/wmt/english_to_french_dev.tsv",
   "model": {
@@ -41,11 +36,11 @@
       "token_characters": {
         "type": "character_encoding",
         "embedding": {
-          "embedding_dim": 10
+          "embedding_dim": 15
         },
         "encoder": {
           "type": "lstm",
-          "input_size": 25,
+          "input_size": 15,
           "hidden_size": 25,
           "num_layers": 2,
           "dropout": 0,
@@ -77,12 +72,14 @@
     "type": "bucket",
     "padding_noise": 0.0,
     "batch_size" : 32,
-    "sorting_keys": [["source_tokens", "num_tokens"]]
+    "sorting_keys": [["source_tokens", "num_tokens"]],
+    "instances_per_epoch": 100000,
+    "max_instances_in_memory": 10000
   },
   "trainer": {
     "optimizer": {
       "type": "sgd",
-      "lr": 0.1
+      "lr": 0.01
     },
     "learning_rate_scheduler": {
       "type": "cosine",
