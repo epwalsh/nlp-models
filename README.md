@@ -61,6 +61,8 @@ make train
 
 # Create vocab. When prompted for the model file, enter "experiments/wmt/en_fr_vocab.json",
 # and when prompted for the serialization directory, enter "data/wmt".
+# NOTE: this takes a ridicolous amount of memory at the moment, so a better option
+# may be to create the vocab from pretrained embedding files.
 make vocab
 
 # Train model. When prompted for the model file, enter "experiments/wmt/en_fr_copynet.json".
