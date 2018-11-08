@@ -1,5 +1,5 @@
 debug         = 0
-test          = nlpete
+test          = nlpete scripts
 COVERAGE     := $(addprefix --cov=, $(test))
 PYTHONPATH    = allennlp
 DATADIR       = data
