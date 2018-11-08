@@ -1,4 +1,4 @@
 [run]
 omit = 
-    nlpete/tests/*
+	nlpete/tests/*
 	scripts/*
