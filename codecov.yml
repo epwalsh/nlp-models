@@ -10,4 +10,5 @@ coverage:
       default:
         target: 90
 ignore:
-  - "modules/tests/"
+  - "nlpete/tests/"
+  - "scripts/"

@@ -1,11 +1,13 @@
 debug         = 0
-test          = nlpete
+test          = nlpete scripts
 COVERAGE     := $(addprefix --cov=, $(test))
 PYTHONPATH    = allennlp
 DATADIR       = data
 DATASETS     := $(wildcard $(DATADIR)/*.tar.gz)
 EXPERIMENTDIR = experiments
 EXPERIMENTS  := $(wildcard $(EXPERIMENTDIR)/**/*.json)
+BENCHMARKDIR  = scripts/benchmarking
+BENCHMARKS   := $(wildcard $(BENCHMARKDIR)/*.py)
 
 #
 # Training commands.
@@ -62,7 +64,7 @@ endif
 
 .PHONY : check-scripts
 check-scripts :
-	./scripts/checks/run_all.sh ./scripts/checks/check_requirements.sh
+	./scripts/checks/run_all.sh ./scripts/checks/check_requirements.sh $(BENCHMARKS)
 
 .PHONY : test
 test : typecheck lint unit-test
