@@ -98,7 +98,7 @@ class CopyNet(Model):
                                      f"You can ensure this token is added to the target namespace with the "
                                      f"vocabulary parameter 'tokens_to_add'.")
 
-        self._metric = metric or BLEU(exclude_indices=(self._pad_index, self._end_index, self._start_index))
+        self._metric = metric or BLEU(exclude_indices={self._pad_index, self._end_index, self._start_index})
 
         self._target_vocab_size = self.vocab.get_vocab_size(self._target_namespace)
 

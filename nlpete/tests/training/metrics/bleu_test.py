@@ -15,7 +15,7 @@ class BleuTest(AllenNlpTestCase):
 
     def setUp(self):
         super().setUp()
-        self.metric = BLEU(ngram_weights=(0.5, 0.5), exclude_indices=set((0,)))
+        self.metric = BLEU(ngram_weights=(0.5, 0.5), exclude_indices={0})
 
     def test_get_valid_tokens_mask(self):
         tensor = torch.tensor([[1, 2, 3, 0],
