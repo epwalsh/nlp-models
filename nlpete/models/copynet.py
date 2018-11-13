@@ -81,7 +81,7 @@ class CopyNet(Model):
                  copy_token: str = "@COPY@",
                  source_namespace: str = "source_tokens",
                  target_namespace: str = "target_tokens",
-                 metric: Metric = BLEU()) -> None:
+                 metric: Metric = None) -> None:
         super(CopyNet, self).__init__(vocab)
         self._metric = metric
         self._source_namespace = source_namespace
@@ -97,6 +97,8 @@ class CopyNet(Model):
             raise ConfigurationError(f"Special copy token {copy_token} missing from target vocab namespace. "
                                      f"You can ensure this token is added to the target namespace with the "
                                      f"vocabulary parameter 'tokens_to_add'.")
+
+        self._metric = metric or BLEU(exclude_indices=(self._pad_index, self._end_index, self._start_index))
 
         self._target_vocab_size = self.vocab.get_vocab_size(self._target_namespace)
 
@@ -164,6 +166,9 @@ class CopyNet(Model):
         source_to_target : ``torch.Tensor``, required
             Tensor containing vocab index of each source token with respect to the
             target vocab namespace. Shape: `(batch_size, trimmed_source_length)`.
+        metadata : ``List[Dict[str, Any]]``, required
+            Metadata field that contains the original source tokens ('source_tokens')
+            and any other meta fields.
         target_tokens : ``Dict[str, torch.LongTensor]``, optional (default = None)
             Output of `Textfield.as_array()` applied on target `TextField`. We assume that the
             target tokens are also represented as a `TextField`.
@@ -199,8 +204,7 @@ class CopyNet(Model):
                 best_predictions = top_k_predictions[:, 0, :]
                 # shape: (batch_size, target_sequence_length)
                 gold_tokens = self._gather_extended_gold_tokens(target_tokens["tokens"], target_to_source)
-                self._metric(best_predictions, gold_tokens,
-                             (self._pad_index, self._end_index, self._start_index))
+                self._metric(best_predictions, gold_tokens)
 
         return output_dict
 
