@@ -54,7 +54,7 @@ make data/nl2bash.tar.gz
 # Train model. When prompted for the model file, enter "experiments/nl2bash/copynet.json".
 make train
 ```
-- **[WMT 2015 English to French with CopyNet](./experiments/wmt/en_fr_copynet.json)**
+- **[WMT 2015 English to French with CopyNet](./experiments/wmt/en_fr_copynet.json)** (work in progress)
 ```bash
 # Download, extract, and preprocess data (big file, may take around 10 minutes).
 ./scripts/data/pull_wmt.sh

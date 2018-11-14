@@ -63,11 +63,15 @@ class CopyNet(Model):
         The namespace for the source vocabulary.
     target_namespace : ``str``, optional (default = 'target_tokens')
         The namespace for the target vocabulary.
-    metric : ``Metric``, optional (default = BLEU)
-        A metrics to track on a validation set. Note that this metric must accept
-        three arguments when called: a batched tensor of predicted token indices, a batched
-        tensor of gold token indices, and a set of token indices to exclude when
-        calculating n-grams (usually should be the start index, end index, and pad index).
+    tensor_based_metric : ``Metric``, optional (default = BLEU)
+        A metric to track on validation data that takes raw tensors when its called.
+        This metric must accept two arguments when called: a batched tensor
+        of predicted token indices, and a batched tensor of gold token indices.
+    token_based_metric : ``Metric``, optional (default = None)
+        A metric to track on validation data that takes lists of lists of tokens
+        as input. This metric must accept two arguments when called, both
+        of type `List[List[str]]`. The first is a predicted sequence for each item
+        in the batch and the second is a gold sequence for each item in the batch.
     """
 
     def __init__(self,
@@ -81,9 +85,9 @@ class CopyNet(Model):
                  copy_token: str = "@COPY@",
                  source_namespace: str = "source_tokens",
                  target_namespace: str = "target_tokens",
-                 metric: Metric = BLEU()) -> None:
+                 tensor_based_metric: Metric = None,
+                 token_based_metric: Metric = None) -> None:
         super(CopyNet, self).__init__(vocab)
-        self._metric = metric
         self._source_namespace = source_namespace
         self._target_namespace = target_namespace
         self._src_start_index = self.vocab.get_token_index(START_SYMBOL, self._source_namespace)
@@ -97,6 +101,10 @@ class CopyNet(Model):
             raise ConfigurationError(f"Special copy token {copy_token} missing from target vocab namespace. "
                                      f"You can ensure this token is added to the target namespace with the "
                                      f"vocabulary parameter 'tokens_to_add'.")
+
+        self._tensor_based_metric = tensor_based_metric or \
+            BLEU(exclude_indices={self._pad_index, self._end_index, self._start_index})
+        self._token_based_metric = token_based_metric
 
         self._target_vocab_size = self.vocab.get_vocab_size(self._target_namespace)
 
@@ -164,6 +172,9 @@ class CopyNet(Model):
         source_to_target : ``torch.Tensor``, required
             Tensor containing vocab index of each source token with respect to the
             target vocab namespace. Shape: `(batch_size, trimmed_source_length)`.
+        metadata : ``List[Dict[str, Any]]``, required
+            Metadata field that contains the original source tokens ('source_tokens')
+            and any other meta fields.
         target_tokens : ``Dict[str, torch.LongTensor]``, optional (default = None)
             Output of `Textfield.as_array()` applied on target `TextField`. We assume that the
             target tokens are also represented as a `TextField`.
@@ -192,15 +203,21 @@ class CopyNet(Model):
             state = self._init_decoder_state(state)
             predictions = self._forward_beam_search(state)
             output_dict.update(predictions)
-            if self._metric and target_tokens:
-                # shape: (batch_size, beam_size, max_sequence_length)
-                top_k_predictions = output_dict["predictions"]
-                # shape: (batch_size, max_predicted_sequence_length)
-                best_predictions = top_k_predictions[:, 0, :]
-                # shape: (batch_size, target_sequence_length)
-                gold_tokens = self._gather_extended_gold_tokens(target_tokens["tokens"], target_to_source)
-                self._metric(best_predictions, gold_tokens,
-                             (self._pad_index, self._end_index, self._start_index))
+            if target_tokens:
+                if self._tensor_based_metric is not None:
+                    # shape: (batch_size, beam_size, max_sequence_length)
+                    top_k_predictions = output_dict["predictions"]
+                    # shape: (batch_size, max_predicted_sequence_length)
+                    best_predictions = top_k_predictions[:, 0, :]
+                    # shape: (batch_size, target_sequence_length)
+                    gold_tokens = self._gather_extended_gold_tokens(target_tokens["tokens"],
+                                                                    target_to_source)
+                    self._tensor_based_metric(best_predictions, gold_tokens)
+                if self._token_based_metric is not None:
+                    predicted_tokens = self._get_predicted_tokens(output_dict["predictions"],
+                                                                  metadata,
+                                                                  n_best=1)
+                    self._token_based_metric(predicted_tokens, [x["target_tokens"] for x in metadata])
 
         return output_dict
 
@@ -791,9 +808,15 @@ class CopyNet(Model):
         return final_probs.log(), state
 
     def _get_predicted_tokens(self,
-                              predicted_indices: numpy.ndarray,
+                              predicted_indices: Union[torch.Tensor, numpy.ndarray],
                               batch_metadata: List[Any],
                               n_best: int = None) -> List[Union[List[List[str]], List[str]]]:
+        """
+        Convert predicted indices into tokens.
+
+        If `n_best = 1`, the result type will be `List[List[str]]`. Otherwise the result
+        type will be `List[List[List[str]]]`.
+        """
         if not isinstance(predicted_indices, numpy.ndarray):
             predicted_indices = predicted_indices.detach().cpu().numpy()
         predicted_tokens: List[Union[List[List[str]], List[str]]] = []
@@ -835,6 +858,9 @@ class CopyNet(Model):
     @overrides
     def get_metrics(self, reset: bool = False) -> Dict[str, float]:
         all_metrics: Dict[str, float] = {}
-        if self._metric and not self.training:
-            all_metrics.update(self._metric.get_metric(reset=reset))
+        if not self.training:
+            if self._tensor_based_metric is not None:
+                all_metrics.update(self._tensor_based_metric.get_metric(reset=reset))
+            if self._token_based_metric is not None:
+                all_metrics.update(self._token_based_metric.get_metric(reset=reset))
         return all_metrics
