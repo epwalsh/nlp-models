@@ -35,6 +35,11 @@ class CopyNetTest(ModelTestCase):
             assert all(isinstance(x, str) for x in predicted_tokens)
             assert end_token not in predicted_tokens
 
+    def test_model_can_train_with_token_metric(self):
+        param_overrides = json.dumps({"model": {"token_based_metric": {"type": "token_sequence_accuracy"}}})
+        self.ensure_model_can_train_save_and_load(self.param_file, tolerance=1e-2,
+                                                  overrides=param_overrides)
+
     def test_vocab(self):
         vocab = self.model.vocab
         assert vocab.get_vocab_size(self.model._target_namespace) == 8
