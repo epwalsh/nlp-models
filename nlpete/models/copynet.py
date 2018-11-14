@@ -286,21 +286,16 @@ class CopyNet(Model):
         """
         # shape: (batch_size, max_input_sequence_length, encoder_input_dim)
         embedded_input = self._source_embedder(source_tokens)
-
         # shape: (batch_size, max_input_sequence_length)
         source_mask = util.get_text_field_mask(source_tokens)
-
         # shape: (batch_size, max_input_sequence_length, encoder_output_dim)
         encoder_outputs = self._encoder(embedded_input, source_mask)
-
-        state = {
+        return {
                 "source_mask": source_mask,
                 "encoder_outputs": encoder_outputs,
                 "source_to_source": source_to_source,
                 "source_to_target": source_to_target,
         }
-
-        return state
 
     def _decoder_step(self,
                       last_predictions: torch.Tensor,
@@ -308,30 +303,23 @@ class CopyNet(Model):
                       state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # shape: (batch_size, max_input_sequence_length, encoder_output_dim)
         encoder_outputs_mask = state["source_mask"].float()
-
         # shape: (group_size, target_embedding_dim)
         embedded_input = self._target_embedder(last_predictions)
-
         # shape: (batch_size, max_input_sequence_length)
         attentive_weights = self._attention(
                 state["decoder_hidden"], state["encoder_outputs"], encoder_outputs_mask)
-
         # shape: (batch_size, encoder_output_dim)
         attentive_read = util.weighted_sum(state["encoder_outputs"], attentive_weights)
-
         # shape: (batch_size, encoder_output_dim)
         selective_read = util.weighted_sum(state["encoder_outputs"][:, 1:-1], selective_weights)
-
         # shape: (group_size, target_embedding_dim + encoder_output_dim * 2)
         decoder_input = torch.cat((embedded_input, attentive_read, selective_read), -1)
-
         # shape: (group_size, decoder_input_dim)
         projected_decoder_input = self._input_projection_layer(decoder_input)
 
         state["decoder_hidden"], state["decoder_context"] = self._decoder_cell(
                 projected_decoder_input,
                 (state["decoder_hidden"], state["decoder_context"]))
-
         return state
 
     def _get_generation_scores(self, state: Dict[str, torch.Tensor]) -> torch.Tensor:
@@ -340,16 +328,12 @@ class CopyNet(Model):
     def _get_copy_scores(self, state: Dict[str, torch.Tensor]) -> torch.Tensor:
         # shape: (batch_size, max_input_sequence_length - 2, encoder_output_dim)
         trimmed_encoder_outputs = state["encoder_outputs"][:, 1:-1]
-
         # shape: (batch_size, max_input_sequence_length - 2, decoder_output_dim)
         copy_projection = self._output_copying_layer(trimmed_encoder_outputs)
-
         # shape: (batch_size, max_input_sequence_length - 2, decoder_output_dim)
         copy_projection = torch.tanh(copy_projection)
-
         # shape: (batch_size, max_input_sequence_length - 2)
         copy_scores = copy_projection.bmm(state["decoder_hidden"].unsqueeze(-1)).squeeze(-1)
-
         return copy_scores
 
     def _get_ll_contrib(self,
@@ -387,14 +371,11 @@ class CopyNet(Model):
         # correctly during the softmax.
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         mask = torch.cat((generation_scores.new_full(generation_scores.size(), 1.0), copy_mask), dim=-1)
-
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         all_scores = torch.cat((generation_scores, copy_scores), dim=-1)
-
         # Normalize generation and copy scores.
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         probs = util.masked_softmax(all_scores, mask)
-
         # Calculate the probability (normalized copy score) for each token in the source sentence
         # that matches the current target token. We end up summing the scores
         # for each occurence of a matching token to get the actual score, but we also
@@ -406,21 +387,17 @@ class CopyNet(Model):
         sum_selective_weights = raw_selective_weights.sum(-1)
         # shape: (batch_size, trimmed_source_length)
         selective_weights = raw_selective_weights / (sum_selective_weights.unsqueeze(-1) + 1e-13)
-
         # This mask ensures that item in the batch has a non-zero generation score for this timestep
         # only when the gold target token is not OOV or there are no matching tokens
         # in the source sentence.
         # shape: (batch_size,)
         gen_mask = ((target_tokens != self._oov_index) | (target_to_source.sum(-1) == 0)).float()
-
         # Now we get the generation score for the gold target token.
         # shape: (batch_size,)
         step_likelihood = probs.gather(1, target_tokens.unsqueeze(1)).squeeze(-1) * gen_mask
-
         # ... and add the copy score.
         # shape: (batch_size,)
         step_likelihood = step_likelihood + sum_selective_weights
-
         # shape: (batch_size,)
         step_log_likelihood = step_likelihood.log()
 
@@ -433,22 +410,19 @@ class CopyNet(Model):
         """
         Calculate the loss against gold targets.
         """
+        batch_size, target_sequence_length = target_tokens["tokens"].size()
+
         # shape: (batch_size, max_input_sequence_length)
         source_mask = state["source_mask"]
-
-        batch_size, target_sequence_length = target_tokens["tokens"].size()
 
         # The last input from the target is either padding or the end symbol.
         # Either way, we don't have to process it.
         num_decoding_steps = target_sequence_length - 1
-
         # We use this to fill in the copy index when the previous input was copied.
         # shape: (batch_size,)
         copy_input_choices = source_mask.new_full((batch_size,), fill_value=self._copy_index)
-
         # shape: (batch_size, trimmed_source_length)
         copy_mask = source_mask[:, 1:-1].float()
-
         # We need to keep track of the probabilities assigned to tokens in the source
         # sentence that were copied during the previous timestep, since we use
         # those probabilities as weights when calculating the "selective read".
@@ -459,7 +433,6 @@ class CopyNet(Model):
         for timestep in range(num_decoding_steps):
             # shape: (batch_size,)
             input_choices = target_tokens["tokens"][:, timestep]
-
             # If the previous target token was copied, we use the special copy token.
             # But the end target token will always be THE end token, so we know
             # it was not copied.
@@ -467,28 +440,21 @@ class CopyNet(Model):
                 # Get mask tensor indicating which instances were copied.
                 # shape: (batch_size,)
                 copied = (target_to_source[:, timestep, :].sum(-1) > 0).long()
-
                 # shape: (batch_size,)
                 input_choices = input_choices * (1 - copied) + copy_input_choices * copied
-
             # Update the decoder state by taking a step through the RNN.
             state = self._decoder_step(input_choices, selective_weights, state)
-
             # Get generation scores for each token in the target vocab.
             # shape: (batch_size, target_vocab_size)
             generation_scores = self._get_generation_scores(state)
-
             # Get copy scores for each token in the source sentence, excluding the start
             # and end tokens.
             # shape: (batch_size, max_input_sequence_length - 2)
             copy_scores = self._get_copy_scores(state)
-
             # shape: (batch_size,)
             step_target_tokens = target_tokens["tokens"][:, timestep + 1]
-
             # shape: (batch_size, max_input_sequence_length - 2)
             step_target_to_source = target_to_source[:, timestep + 1]
-
             step_log_likelihood, selective_weights = self._get_ll_contrib(
                     generation_scores,
                     copy_scores,
@@ -500,20 +466,16 @@ class CopyNet(Model):
         # Gather step log-likelihoods.
         # shape: (batch_size, num_decoding_steps = target_sequence_length - 1)
         log_likelihoods = torch.cat(step_log_likelihoods, 1)
-
         # Get target mask to exclude likelihood contributions from timesteps after
         # the END token.
         # shape: (batch_size, target_sequence_length)
         target_mask = util.get_text_field_mask(target_tokens)
-
         # The first timestep is just the START token, which is not included in the likelihoods.
         # shape: (batch_size, num_decoding_steps)
         target_mask = target_mask[:, 1:].float()
-
         # Sum of step log-likelihoods.
         # shape: (batch_size,)
         log_likelihood = (log_likelihoods * target_mask).sum(dim=-1)
-
         # The loss is the negative log-likelihood, averaged over the batch.
         loss = - log_likelihood.sum() / batch_size
 
@@ -522,24 +484,18 @@ class CopyNet(Model):
     def _forward_beam_search(self, state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         batch_size, source_length = state["source_mask"].size()
         trimmed_source_length = source_length - 2
-
         # Initialize the copy scores to zero.
         state["copy_probs"] = state["decoder_hidden"].new_zeros((batch_size, trimmed_source_length))
-
         # shape: (batch_size,)
         start_predictions = state["source_mask"].new_full((batch_size,), fill_value=self._start_index)
-
         # shape (all_top_k_predictions): (batch_size, beam_size, num_decoding_steps)
         # shape (log_probabilities): (batch_size, beam_size)
         all_top_k_predictions, log_probabilities = self._beam_search.search(
                 start_predictions, state, self.take_search_step)
-
-        output_dict = {
+        return {
                 "predicted_log_probs": log_probabilities,
                 "predictions": all_top_k_predictions,
         }
-
-        return output_dict
 
     def _get_input_and_selective_weights(self,
                                          last_predictions: torch.LongTensor,
@@ -622,10 +578,8 @@ class CopyNet(Model):
 
         # shape: (group_size, trimmed_source_length)
         mask = source_only_copied | source_copied_and_generated
-
         # shape: (group_size, trimmed_source_length)
         raw_selective_weights = state["copy_probs"] * mask.float()
-
         # shape: (group_size, trimmed_source_length)
         selective_weights = raw_selective_weights / (raw_selective_weights.sum(dim=-1, keepdim=True) + 1e-13)
 
@@ -658,14 +612,12 @@ class CopyNet(Model):
         for i in range(trimmed_source_length):
             # shape: (group_size,)
             copy_probs_slice = copy_probs[:, i]
-
             # `source_to_target` is a matrix of shape (group_size, trimmed_source_length)
             # where element (i, j) is the vocab index of the target token that matches the jth
             # source token in the ith group, if there is one, or the index of the OOV symbol otherwise.
             # We'll use this to add copy scores to corresponding generation scores.
             # shape: (group_size,)
             source_to_target_slice = state["source_to_target"][:, i]
-
             # The OOV index in the source_to_target_slice indicates that the source
             # token is not in the target vocab, so we don't want to add that copy score
             # to the OOV token.
@@ -673,7 +625,6 @@ class CopyNet(Model):
             copy_probs_to_add = copy_probs_slice * copy_probs_to_add_mask
             generation_probs.scatter_add_(
                     -1, source_to_target_slice.unsqueeze(-1), copy_probs_to_add.unsqueeze(-1))
-
             # We have to combine copy scores for duplicate source tokens so that
             # we can find the overall most likely source token. So, if this is the first
             # occurence of this particular source token, we add the probs from all other
@@ -699,7 +650,6 @@ class CopyNet(Model):
             # above so that we don't double-count them.
             # shape: (group_size,)
             left_over_copy_probs = copy_probs_slice * (1.0 - copy_probs_to_add_mask)
-
             modified_probs_list.append(left_over_copy_probs.unsqueeze(-1))
 
         # shape: (group_size, target_vocab_size + trimmed_source_length)
@@ -765,39 +715,29 @@ class CopyNet(Model):
         # there will be all zeros.
         # shape: (group_size,), (group_size, trimmed_source_length)
         input_choices, selective_weights = self._get_input_and_selective_weights(last_predictions, state)
-
         # Update the decoder state by taking a step through the RNN.
         state = self._decoder_step(input_choices, selective_weights, state)
-
         # Get the un-normalized generation scores for each token in the target vocab.
         # shape: (group_size, target_vocab_size)
         generation_scores = self._get_generation_scores(state)
-
         # Get the un-normalized copy scores for each token in the source sentence,
         # excluding the start and end tokens.
         # shape: (group_size, trimmed_source_length)
         copy_scores = self._get_copy_scores(state)
-
         # Concat un-normalized generation and copy scores.
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         all_scores = torch.cat((generation_scores, copy_scores), dim=-1)
-
         # shape: (group_size, trimmed_source_length)
         copy_mask = state["source_mask"][:, 1:-1].float()
-
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         mask = torch.cat((generation_scores.new_full(generation_scores.size(), 1.0), copy_mask), dim=-1)
-
         # Normalize generation and copy scores.
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
         probs = util.masked_softmax(all_scores, mask)
-
         # shape: (group_size, target_vocab_size), (group_size, trimmed_source_length)
         generation_probs, copy_probs = probs.split([self._target_vocab_size, trimmed_source_length], dim=-1)
-
         # Update copy_probs needed for getting the `selective_weights` at the next timestep.
         state["copy_probs"] = copy_probs
-
         # We now have normalized generation and copy scores, but to produce the final
         # score for each token in the extended vocab, we have to go through and add
         # the copy scores to the generation scores of matching target tokens, and sum
