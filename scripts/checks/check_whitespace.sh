@@ -2,7 +2,7 @@
 
 exit_code=0
 
-trailing_whitespace=$(find . \
+trailing_whitespace=$(find ./experiments \
     -name '*.json' \
     -exec egrep -l " +$" {} \;)
 for path in $trailing_whitespace; do
@@ -12,7 +12,7 @@ done
 
 shopt -s globstar
 # shellcheck disable=SC2016
-empty_line_at_end=$(sed -ns '${/^$/F}' ./**/*.json)
+empty_line_at_end=$(sed -ns '${/^$/F}' ./experiments/**/*.json)
 for path in $empty_line_at_end; do
     exit_code=1
     echo "  ✗ blank line at end of file: $path"
