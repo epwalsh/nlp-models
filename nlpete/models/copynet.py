@@ -14,10 +14,8 @@ from allennlp.models.model import Model
 from allennlp.modules import Attention, TextFieldEmbedder, Seq2SeqEncoder
 from allennlp.modules.token_embedders import Embedding
 from allennlp.nn import util
-from allennlp.training.metrics import Metric
+from allennlp.training.metrics import Metric, BLEU
 from allennlp.nn.beam_search import BeamSearch
-
-from nlpete.training.metrics import BLEU
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name

@@ -1,5 +1,6 @@
 from collections import Counter
 import math
+import warnings
 from typing import Iterable, Tuple, Dict, Set
 
 from overrides import overrides
@@ -8,7 +9,6 @@ import torch
 from allennlp.training.metrics import Metric
 
 
-@Metric.register("bleu")
 class BLEU(Metric):
     """
     Bilingual Evaluation Understudy (BLEU).
@@ -34,6 +34,8 @@ class BLEU(Metric):
     def __init__(self,
                  ngram_weights: Iterable[float] = (0.25, 0.25, 0.25, 0.25),
                  exclude_indices: Set[int] = None) -> None:
+        warnings.warn("This BLEU implementation has been contributed to AllenNLP, "
+                      "where it will be maintained.", DeprecationWarning)
         self._ngram_weights = ngram_weights
         self._exclude_indices = exclude_indices or set()
         self._precision_matches: Dict[int, int] = Counter()

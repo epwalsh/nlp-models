@@ -1,10 +1,11 @@
-# pylint: disable=protected-access,not-callable
+# pylint: disable=protected-access,not-callable,no-self-use
 
 from collections import Counter
 import math
 
 import numpy as np
 import torch
+import pytest
 
 from allennlp.common.testing import AllenNlpTestCase
 
@@ -16,6 +17,10 @@ class BleuTest(AllenNlpTestCase):
     def setUp(self):
         super().setUp()
         self.metric = BLEU(ngram_weights=(0.5, 0.5), exclude_indices={0})
+
+    def test_deprecation_warning(self):
+        with pytest.warns(DeprecationWarning):
+            BLEU()
 
     def test_get_valid_tokens_mask(self):
         tensor = torch.tensor([[1, 2, 3, 0],
