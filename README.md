@@ -7,9 +7,22 @@ My NLP research experiments, built on PyTorch within the [AllenNLP](https://gith
 
 ----
 
-The goal of this project is to provide a model for what a high-quality personal research library could look like. It provides **modularity**, **continuous integration**, **high test coverage**, a code base that emphasizes **readability**, and a host of scripts that make reproducing any experiment here as easy as running a few `make` commands.
+The goal of this project is to provide an example of a high-quality personal research library. It provides **modularity**, **continuous integration**, **high test coverage**, a code base that emphasizes **readability**, and a host of scripts that make reproducing any experiment here as easy as running a few `make` commands. I also strive to make `nlp-models` useful by implementing practical modules and models that extend AllenNLP. Sometimes I'll contribute pieces of what I work on here back to AllenNLP after it has been thoroughly tested.
 
-## Quick start
+## Overview
+
+At a high-level, the structure of this project mimics that of AllenNLP. That is, the submodules in [nlpete](./nlpete) are organized in exactly the same way as in [allennlp](https://github.com/allenai/allennlp/tree/master/allennlp). But I've also provided a set of scripts that automate frequently used command sequences, such as running tests or experiments. The [Makefile](./Makefile) serves as the common interface to these scripts:
+
+- `make train`: Train a model. This is basically a wrapper around `allennlp train`, but provides a default serialization directory and automatically creates subdirectories of the serialization directory for different runs of the same experiment.
+- `make test`: Equivalent to running `make typecheck`, `make lint`, `make unit-test`, and `make check-scripts`.
+- `make typecheck`: Runs the [mypy](http://mypy-lang.org/) typechecker.
+- `make lint`:  Runs [pydocstyle](https://github.com/PyCQA/pydocstyle) and [pylint](https://www.pylint.org/).
+- `make unit-test`: Runs all unit tests with [pytest](https://docs.pytest.org/en/latest/).
+- `make check-scripts`: Runs a few other scripts that check miscellaneous things not covered by the other tests.
+- `make create-branch`: A wrapper around the git functionality to create a new branch and push it upstream. You can name a branch after an issue number with `make create-branch issue=NUM` or give it an arbitrary name with `make create-branch name="my-branch"`.
+- `make data/DATASETNAME.tar.gz`: Extract a dataset in the `data/` directory. Just replace `DATASETNAME` with the basename of one of the `.tar.gz` files in that directory.
+
+## Getting started
 
 The modules implemented here are built and tested nightly against the master branch of AllenNLP. Therefore it is recommended that you install AllenNLP from source. The easiest way to do that is as follows:
 
@@ -40,15 +53,6 @@ make train
 ```
 
 > NOTE: All of the model configs in the `experiments/` folder are defined to run on GPU #0. So if you don't have a GPU available or want to use a different GPU, you'll need to modify the `trainer.cuda_device` field in the experiment's config file.
-
-There are several other `make` commands that may come in handy:
-- `make test`: Equivalent to running `make typecheck`, `make lint`, `make unit-test`, and `make check-scripts`.
-- `make typecheck`: Runs the [mypy](http://mypy-lang.org/) typechecker.
-- `make lint`:  Runs [pydocstyle](https://github.com/PyCQA/pydocstyle) and [pylint](https://www.pylint.org/).
-- `make unit-test`: Runs all unit tests with [pytest](https://docs.pytest.org/en/latest/).
-- `make check-scripts`: Runs a few other scripts that check miscellaneous things not covered by the other tests.
-- `make create-branch`: A wrapper around the git functionality to create a new branch and push it upstream. You can name a branch after an issue number with `make create-branch issue=NUM` or give it an arbitrary name with `make create-branch name="my-branch"`.
-- `make data/DATASETNAME.tar.gz`: Extract a dataset in the `data/` directory. Just replace `DATASETNAME` with the basename of one of the `.tar.gz` files in that directory.
 
 ## Models implemented
 
