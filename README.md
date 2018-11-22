@@ -76,7 +76,7 @@ make data/greetings.tar.gz
 make data/nl2bash.tar.gz
 ```
 
-**[WMT 2015](http://www.statmt.org/wmt15/translation-task.html):** Hosted with love by [fast.ai](https://www.fast.ai/), this is dataset of 22.5 million English / French sentence pairs that can be used to train an English to French or French to English machine translation system.
+**[WMT 2015](http://www.statmt.org/wmt15/translation-task.html):** Hosted by [fast.ai](https://www.fast.ai/), this is a dataset of 22.5 million English / French sentence pairs that can be used to train an English to French or French to English machine translation system.
 ```bash
 # Download, extract, and preprocess data (big file, may take around 10 minutes).
 ./scripts/data/pull_wmt.sh
