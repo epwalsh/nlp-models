@@ -81,3 +81,7 @@ make data/nl2bash.tar.gz
 # Download, extract, and preprocess data (big file, may take around 10 minutes).
 ./scripts/data/pull_wmt.sh
 ```
+
+## Issues and improvements
+
+If you've found a bug or have any questions, please feel free to [submit an issue on GitHub](https://github.com/epwalsh/nlp-models/issues/new). I always appreciate pull requests as well.
