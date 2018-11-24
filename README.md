@@ -3,7 +3,7 @@
 [![CircleCI](https://circleci.com/gh/epwalsh/nlp-models.svg?style=svg)](https://circleci.com/gh/epwalsh/nlp-models)
 [![codecov](https://codecov.io/gh/epwalsh/nlp-models/branch/master/graph/badge.svg)](https://codecov.io/gh/epwalsh/nlp-models)
 
-My NLP research experiments, built on PyTorch within the [AllenNLP](https://github.com/allenai/allennlp) framework.
+NLP research experiments, built on PyTorch within the [AllenNLP](https://github.com/allenai/allennlp) framework.
 
 ----
 
