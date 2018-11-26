@@ -437,7 +437,8 @@ class CopyNet(Model):
             if timestep < num_decoding_steps - 1:
                 # Get mask tensor indicating which instances were copied.
                 # shape: (batch_size,)
-                copied = (target_to_source[:, timestep, :].sum(-1) > 0).long()
+                copied = ((input_choices == self._oov_index) &
+                          (target_to_source[:, timestep, :].sum(-1) > 0)).long()
                 # shape: (batch_size,)
                 input_choices = input_choices * (1 - copied) + copy_input_choices * copied
             # Update the decoder state by taking a step through the RNN.
