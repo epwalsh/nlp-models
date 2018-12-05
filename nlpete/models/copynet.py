@@ -191,7 +191,7 @@ class CopyNet(Model):
 
         if target_tokens:
             state = self._init_decoder_state(state)
-            output_dict = self._forward_loop(target_tokens, target_to_source, state)
+            output_dict = self._forward_loss(target_tokens, target_to_source, state)
         else:
             output_dict = {}
 
@@ -400,7 +400,7 @@ class CopyNet(Model):
 
         return step_log_likelihood, selective_weights
 
-    def _forward_loop(self,
+    def _forward_loss(self,
                       target_tokens: Dict[str, torch.LongTensor],
                       target_to_source: torch.Tensor,
                       state: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
