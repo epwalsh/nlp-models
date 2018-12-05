@@ -373,31 +373,30 @@ class CopyNet(Model):
         all_scores = torch.cat((generation_scores, copy_scores), dim=-1)
         # Normalize generation and copy scores.
         # shape: (batch_size, target_vocab_size + trimmed_source_length)
-        probs = util.masked_softmax(all_scores, mask)
-        # Calculate the probability (normalized copy score) for each token in the source sentence
-        # that matches the current target token. We end up summing the scores
-        # for each occurence of a matching token to get the actual score, but we also
-        # need the un-summed probabilities to create the selective read state
-        # during the next time step.
+        log_probs = util.masked_log_softmax(all_scores, mask)
+        # Calculate the log probability (`log_copy_probs`) for each token in the source sentence
+        # that matches the current target token. We use the sum of these copy probabilities
+        # for matching tokens in the source sentence to get the total probability
+        # for the target token. We also need to normalize the individual copy probabilities
+        # to create `selective_weights`, which are used in the next timestep to create
+        # a selective read state.
         # shape: (batch_size, trimmed_source_length)
-        raw_selective_weights = probs[:, target_size:] * target_to_source.float()
-        # shape: (batch_size,)
-        sum_selective_weights = raw_selective_weights.sum(-1)
-        # shape: (batch_size, trimmed_source_length)
-        selective_weights = raw_selective_weights / (sum_selective_weights.unsqueeze(-1) + 1e-13)
-        # This mask ensures that item in the batch has a non-zero generation score for this timestep
-        # only when the gold target token is not OOV or there are no matching tokens
-        # in the source sentence.
-        # shape: (batch_size,)
+        log_copy_probs = log_probs[:, target_size:] + (target_to_source.float() + 1e-45).log()
+        selective_weights = util.masked_softmax(log_probs[:, target_size:], target_to_source)
+        # This mask ensures that item in the batch has a non-zero generation probabilities
+        # for this timestep only when the gold target token is not OOV or there are no
+        # matching tokens in the source sentence.
+        # shape: (batch_size, 1)
         gen_mask = ((target_tokens != self._oov_index) | (target_to_source.sum(-1) == 0)).float()
+        log_gen_mask = (gen_mask + 1e-45).log().unsqueeze(-1)
         # Now we get the generation score for the gold target token.
+        # shape: (batch_size, 1)
+        log_generation_probs = log_probs.gather(1, target_tokens.unsqueeze(1)) + log_gen_mask
+        # ... and add the copy score to get the step log likelihood.
+        # shape: (batch_size, 1 + trimmed_source_length)
+        combined_gen_and_copy = torch.cat((log_generation_probs, log_copy_probs), dim=-1)
         # shape: (batch_size,)
-        step_likelihood = probs.gather(1, target_tokens.unsqueeze(1)).squeeze(-1) * gen_mask
-        # ... and add the copy score.
-        # shape: (batch_size,)
-        step_likelihood = step_likelihood + sum_selective_weights
-        # shape: (batch_size,)
-        step_log_likelihood = step_likelihood.log()
+        step_log_likelihood = util.logsumexp(combined_gen_and_copy)
 
         return step_log_likelihood, selective_weights
 
