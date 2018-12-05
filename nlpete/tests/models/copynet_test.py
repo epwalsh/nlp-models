@@ -146,7 +146,7 @@ class CopyNetTest(ModelTestCase):
         # shape: (group_size,)
         last_predictions = torch.tensor([5,                       # only generated.
                                          6,                       # copied AND generated.
-                                         target_vocab_size + 1])  # only generated.
+                                         target_vocab_size + 1])  # only copied.
         # shape: (group_size, trimmed_source_length)
         source_to_target = torch.tensor([[6, oov_index, oov_index],
                                          [6, oov_index, 6],
