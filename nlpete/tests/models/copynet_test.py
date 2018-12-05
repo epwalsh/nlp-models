@@ -171,7 +171,7 @@ class CopyNetTest(ModelTestCase):
         state = {
                 "source_to_target": source_to_target,
                 "source_to_source": source_to_source,
-                "copy_probs": copy_probs,
+                "copy_log_probs": (copy_probs + 1e-45).log(),
         }
 
         input_choices, selective_weights = \
@@ -191,7 +191,7 @@ class CopyNetTest(ModelTestCase):
                                             [0.0, 0.5, 0.5]])
         np.testing.assert_equal(selective_weights.numpy(), selective_weights_check)
 
-    def test_gather_final_probs(self):
+    def test_gather_final_log_probs(self):
         target_vocab_size = self.model._target_vocab_size
         assert target_vocab_size == 8
 
@@ -222,7 +222,8 @@ class CopyNetTest(ModelTestCase):
                 "source_to_source": source_to_source,
         }
 
-        final_probs = self.model._gather_final_probs(generation_probs, copy_probs, state)
+        final_log_probs = self.model._gather_final_log_probs(generation_probs.log(), copy_probs.log(), state)
+        final_probs = final_log_probs.exp()
         assert list(final_probs.size()) == [2, target_vocab_size + 3]
 
         final_probs_check = np.array([
