@@ -454,7 +454,7 @@ class CopyNet(Model):
                 # Get mask tensor indicating which instances were copied.
                 # shape: (batch_size,)
                 copied = ((input_choices == self._oov_index) &
-                          (target_to_source[:, timestep].sum(-1) > 0)).long()
+                          (target_to_source.sum(-1) > 0)).long()
                 # shape: (batch_size,)
                 input_choices = input_choices * (1 - copied) + copy_input_choices * copied
                 # shape: (batch_size, trimmed_source_length)
