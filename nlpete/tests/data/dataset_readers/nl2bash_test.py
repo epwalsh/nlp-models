@@ -1,5 +1,3 @@
-import numpy as np
-
 from allennlp.common.testing import AllenNlpTestCase
 from allennlp.common.util import ensure_list
 from nlpete.data.dataset_readers import NL2BashDatasetReader
