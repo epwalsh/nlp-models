@@ -21,23 +21,6 @@ class TestNL2BashReader(AllenNlpTestCase):
         assert [t.text for t in fields["target_tokens"].tokens] == \
             ["@start@", "bunzip", "2", " ", "file", ".", "bz", "2", "@end@"]
 
-    def test_target_to_source(self):
-        target_to_source = self.instances[2].fields["target_to_source"]
-
-        # shape should be (target_length, source_length - 2)
-        assert target_to_source.array.shape == (9, 9)
-
-        check = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0],  # @START@
-                          [0, 0, 0, 0, 0, 0, 0, 0, 0],  # bunzip
-                          [0, 0, 0, 0, 0, 1, 0, 0, 0],  # 2
-                          [0, 1, 0, 1, 0, 0, 1, 0, 0],  # \s
-                          [0, 0, 0, 0, 0, 0, 0, 1, 0],  # file
-                          [0, 0, 0, 0, 0, 0, 0, 0, 1],  # .
-                          [0, 0, 0, 0, 1, 0, 0, 0, 0],  # bz
-                          [0, 0, 0, 0, 0, 1, 0, 0, 0],  # 2
-                          [0, 0, 0, 0, 0, 0, 0, 0, 0]]) # @END@
-        np.testing.assert_equal(target_to_source.array, check)
-
     def test_preprocess_target(self):
         # pylint: disable=protected-access
         tgt_str = "sudo find ."
