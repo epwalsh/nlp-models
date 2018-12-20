@@ -12,6 +12,7 @@ from allennlp.common.testing import ModelTestCase
 
 from nlpete.data.dataset_readers import CopyNetDatasetReader
 from nlpete.models import CopyNet  # pylint: disable=unused-import
+from nlpete.training.metrics import BLEU, TokenSequenceAccuracy  # pylint: disable=unused-import
 from nlpete.predictors import CopyNetPredictor
 
 
@@ -55,11 +56,9 @@ class CopyNetTest(ModelTestCase):
         inputs = self.instances[0].as_tensor_dict()
         source_tokens = inputs["source_tokens"]
         target_tokens = inputs["target_tokens"]
-        target_to_source = inputs["target_to_source"]
 
         assert list(source_tokens["tokens"].size()) == [11]
         assert list(target_tokens["tokens"].size()) == [10]
-        assert list(target_to_source.size()) == [10, 9]
 
         assert target_tokens["tokens"][0] == self.model._start_index
         assert target_tokens["tokens"][4] == self.model._oov_index
@@ -151,18 +150,10 @@ class CopyNetTest(ModelTestCase):
         source_to_target = torch.tensor([[6, oov_index, oov_index],
                                          [6, oov_index, 6],
                                          [5, oov_index, oov_index]])
-        # shape: (group_size, trimmed_source_length, trimmed_source_length)
-        source_to_source = torch.tensor([
-                [[1, 0, 0],  # no duplicates.
-                 [0, 1, 0],
-                 [0, 0, 1]],
-                [[1, 0, 1],  # first and last source tokens match.
-                 [0, 1, 0],
-                 [1, 0, 1]],
-                [[1, 0, 0],  # middle and last source tokens match.
-                 [0, 1, 1],
-                 [0, 1, 1]],
-        ])
+        # shape: (group_size, trimmed_source_length)
+        source_token_ids = torch.tensor([[0, 1, 2],  # no duplicates.
+                                         [0, 1, 0],  # first and last source tokens match.
+                                         [0, 1, 1]]) # middle and last source tokens match.
         # shape: (group_size, trimmed_source_length)
         copy_probs = torch.tensor([[0.1, 0.1, 0.1],
                                    [0.1, 0.1, 0.1],
@@ -170,7 +161,7 @@ class CopyNetTest(ModelTestCase):
 
         state = {
                 "source_to_target": source_to_target,
-                "source_to_source": source_to_source,
+                "source_token_ids": source_token_ids,
                 "copy_log_probs": (copy_probs + 1e-45).log(),
         }
 
@@ -201,15 +192,9 @@ class CopyNetTest(ModelTestCase):
         # shape: (group_size, trimmed_source_length)
         source_to_target = torch.tensor([[6, oov_index, oov_index],
                                          [oov_index, 5, 5]])
-        # shape: (group_size, trimmed_source_length, trimmed_source_length)
-        source_to_source = torch.tensor([
-                [[1, 0, 0],
-                 [0, 1, 1],
-                 [0, 1, 1]],
-                [[1, 0, 0],
-                 [0, 1, 1],
-                 [0, 1, 1]],
-        ]).float()
+        # shape: (group_size, trimmed_source_length)
+        source_token_ids = torch.tensor([[0, 1, 1],
+                                         [0, 1, 1]])
         # shape: (group_size, target_vocab_size)
         generation_probs = torch.tensor([[0.1] * target_vocab_size,
                                          [0.1] * target_vocab_size])
@@ -219,7 +204,7 @@ class CopyNetTest(ModelTestCase):
 
         state = {
                 "source_to_target": source_to_target,
-                "source_to_source": source_to_source,
+                "source_token_ids": source_token_ids,
         }
 
         final_log_probs = self.model._gather_final_log_probs(generation_probs.log(), copy_probs.log(), state)
@@ -246,22 +231,29 @@ class CopyNetTest(ModelTestCase):
         oov_index = self.model._oov_index
         tok_index = 6  # some other arbitrary token
         assert tok_index not in [end_index, pad_index, oov_index]
+
+        # first sentence tokens:
+        #  1: oov but not copied
+        #  2: not oov and not copied
+        #  3: not copied
+        #  4: not copied
+        # second sentence tokens:
+        #  1: not oov and copied
+        #  2: oov and copied
+        #  3: not copied
+        #  4: not copied
+
         # shape: (batch_size, target_sequence_length)
         target_tokens = torch.tensor([[oov_index, tok_index, end_index, pad_index],
                                       [tok_index, oov_index, tok_index, end_index]])
-        # shape: (batch_size, target_sequence_length, trimmed_source_length)
-        target_to_source = torch.tensor([
-                [[0, 0, 0, 0],  # oov but not copied
-                 [0, 0, 0, 0],  # not oov and not copied
-                 [0, 0, 0, 0],  # not copied
-                 [0, 0, 0, 0]], # not copied
-                [[0, 1, 0, 0],  # not oov and copied
-                 [1, 0, 1, 0],  # oov and copied
-                 [0, 0, 0, 0],  # not copied
-                 [0, 0, 0, 0]]  # not copied
-        ])
+        # shape: (batch_size, trimmed_source_length)
+        source_token_ids = torch.tensor([[0, 1, 2, 3],
+                                         [0, 1, 0, 2]])
         # shape: (batch_size, target_sequence_length)
-        result = self.model._gather_extended_gold_tokens(target_tokens, target_to_source)
+        target_token_ids = torch.tensor([[4, 5, 6, 7],
+                                         [1, 0, 3, 4]])
+        # shape: (batch_size, target_sequence_length)
+        result = self.model._gather_extended_gold_tokens(target_tokens, source_token_ids, target_token_ids)
         # shape: (batch_size, target_sequence_length)
         check = np.array([[oov_index, tok_index, end_index, pad_index],
                           [tok_index, vocab_size, tok_index, end_index]])

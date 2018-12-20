@@ -6,7 +6,6 @@ from allennlp.common import Params
 from allennlp.common.testing import AllenNlpTestCase
 from allennlp.common.util import ensure_list
 from allennlp.data import DatasetReader
-from allennlp.data.tokenizers import Token
 from allennlp.data.vocabulary import Vocabulary, DEFAULT_OOV_TOKEN
 
 from nlpete.data.dataset_readers import CopyNetDatasetReader  # pylint: disable=unused-import
@@ -27,8 +26,8 @@ class TestCopyNetReader(AllenNlpTestCase):
 
     def test_instances(self):
         assert len(self.instances) == 2
-        assert set(self.instances[0].fields.keys()) == set(("source_tokens", "source_to_source",
-                                                            "target_tokens", "target_to_source",
+        assert set(self.instances[0].fields.keys()) == set(("source_tokens", "source_token_ids",
+                                                            "target_tokens", "target_token_ids",
                                                             "source_to_target", "metadata"))
 
     def test_tokens(self):
@@ -42,23 +41,28 @@ class TestCopyNetReader(AllenNlpTestCase):
         assert fields["metadata"]["target_tokens"] == \
             ["the", "tokens", "\"", "hello", "world", "\"", "were", "copied"]
 
-    def test_target_to_source_array(self):
-        target_to_source = self.instances[0].fields["target_to_source"]
-
-        # shape should be (target_length, source_length - 2)
-        assert target_to_source.array.shape == (10, 9)
-
-        check = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 0],  # @START@
-                          [0, 0, 0, 0, 0, 0, 0, 0, 0],  # the
-                          [0, 1, 0, 0, 0, 0, 0, 0, 0],  # tokens
-                          [0, 0, 0, 0, 0, 0, 0, 0, 0],  # "
-                          [0, 0, 0, 0, 0, 0, 0, 1, 0],  # hello
-                          [0, 0, 0, 0, 0, 0, 0, 0, 1],  # world
-                          [0, 0, 0, 0, 0, 0, 0, 0, 0],  # "
-                          [0, 0, 0, 0, 0, 0, 0, 0, 0],  # were
-                          [0, 0, 0, 0, 1, 0, 0, 0, 0],  # copied
-                          [0, 0, 0, 0, 0, 0, 0, 0, 0]]) # @END@
-        np.testing.assert_equal(target_to_source.array, check)
+    def test_source_and_target_token_ids(self):
+        source_token_ids = self.instances[0].fields["source_token_ids"].array
+        target_token_ids = self.instances[0].fields["target_token_ids"].array
+        assert list(source_token_ids) == [0,   # these
+                                          1,   # tokens
+                                          2,   # should
+                                          3,   # be
+                                          4,   # copied
+                                          5,   # over
+                                          6,   # :
+                                          7,   # hello
+                                          8]   # world
+        assert list(target_token_ids) == [9,   # @start@
+                                          10,  # the
+                                          1,   # tokens
+                                          11,  # "
+                                          7,   # hello
+                                          8,   # world
+                                          11,  # "
+                                          12,  # were
+                                          4,   # copied
+                                          13]  # @end@
 
     def test_source_to_target(self):
         source_to_target_field = self.instances[0].fields["source_to_target"]
@@ -75,13 +79,3 @@ class TestCopyNetReader(AllenNlpTestCase):
                           self.vocab.get_token_index("world", "target_tokens")])
         np.testing.assert_equal(tensor.numpy(), check)
         assert tensor[1].item() != self.vocab.get_token_index(DEFAULT_OOV_TOKEN, "target_tokens")
-
-    def test_source_to_source_array(self):
-        tokens = ["@START@", "a", "cat", "is", "a", "cat", "@END@"]
-        result = self.reader._create_source_to_source_array([Token(x) for x in tokens])
-        check = np.array([[1, 0, 0, 1, 0],  # a
-                          [0, 1, 0, 0, 1],  # cat
-                          [0, 0, 1, 0, 0],  # is
-                          [1, 0, 0, 1, 0],  # a
-                          [0, 1, 0, 0, 1]]) # cat
-        np.testing.assert_equal(result, check)
