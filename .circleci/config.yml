@@ -19,8 +19,8 @@ jobs:
       - restore_cache:
           name: Restoring dependencies cache
           keys:
-            - deps-{{ checksum "allennlp/requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
-            - deps-
+            - deps-v1-{{ checksum "allennlp/requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
+            - deps-v1-
 
       - run:
           name: Installing dependencies
@@ -32,7 +32,7 @@ jobs:
 
       - save_cache:
           name: Saving dependencies cache
-          key: deps-{{ checksum "allennlp/requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
+          key: deps-v1-{{ checksum "allennlp/requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
           paths:
             - venv
 
