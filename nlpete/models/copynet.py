@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import Dict, Tuple, List, Any, Union
 
 import numpy
@@ -146,6 +147,9 @@ class CopyNet(Model):
 
         # At prediction time, we'll use a beam search to find the best target sequence.
         self._beam_search = BeamSearch(self._end_index, max_steps=max_decoding_steps, beam_size=beam_size)
+
+        warnings.warn("The 'copynet' model has been deprecated in favor of "
+                      "the 'copynet_seq2seq' model (now part of the AllenNLP library).", DeprecationWarning)
 
     @overrides
     def forward(self,  # type: ignore

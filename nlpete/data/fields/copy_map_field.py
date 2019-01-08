@@ -1,3 +1,4 @@
+import warnings
 from typing import Dict, List, Optional
 
 from overrides import overrides
@@ -17,6 +18,8 @@ class CopyMapField(Field[torch.Tensor]):
         self._source_tokens = source_tokens
         self._target_namespace = target_namespace
         self._mapping_array: Optional[List[List[int]]] = None
+        warnings.warn("CopyMapField has been deprecated. Please use "
+                      "NamespaceSwappingField instead.", DeprecationWarning)
 
     @overrides
     def index(self, vocab: Vocabulary):
