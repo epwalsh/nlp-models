@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import List, Dict, Tuple, Optional
 
 import numpy as np
@@ -61,6 +62,8 @@ class CopyNetDatasetReader(DatasetReader):
         self._target_tokenizer = target_tokenizer or self._source_tokenizer
         self._source_token_indexers = source_token_indexers or {"tokens": SingleIdTokenIndexer()}
         self._target_token_indexers = target_token_indexers or self._source_token_indexers
+        warnings.warn("The 'copynet' dataset reader has been deprecated in favor of the "
+                      "'copynet_seq2seq' dataset reader (now part of the AllenNLP library).", DeprecationWarning)
 
     @staticmethod
     def _read_line(line_num: int, line: str) -> Tuple[Optional[str], Optional[str]]:
