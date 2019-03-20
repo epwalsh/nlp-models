@@ -27,7 +27,7 @@ jobs:
           command: |
             python3 -m venv venv
             . venv/bin/activate
-            cd allennlp && ./scripts/install_requirements.sh && cd -
+            pip install -r allennlp/requirements.txt
             pip install -r additional_requirements.txt
 
       - save_cache:
