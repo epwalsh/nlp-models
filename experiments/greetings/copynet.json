@@ -78,10 +78,9 @@
     "learning_rate_scheduler": {
       "type": "cosine",
       "t_initial": 5,
-      "t_mul": 1.5,
       "eta_mul": 0.9
     },
-    "num_epochs": 80,
+    "num_epochs": 10,
     "cuda_device": 0,
     "should_log_learning_rate": true,
     "should_log_parameter_statistics": false
