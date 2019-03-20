@@ -16,14 +16,19 @@ BENCHMARKS   := $(wildcard $(BENCHMARKDIR)/*.py)
 .PHONY : train
 train :
 ifeq ($(debug),0)
-	./scripts/training/train.sh
+	@./scripts/training/train.sh
 else
-	CUDA_LAUNCH_BLOCKING=1 ./scripts/train.sh
+	@echo "<=== Debug mode ===>"
+	@CUDA_LAUNCH_BLOCKING=1 ./scripts/training/train.sh
 endif
+
+.PHONY : tensorboard
+tensorboard :
+	@TB_PORT=$(port) TB_LOGDIR=$(logdir) ./scripts/training/tensorboard.sh
 
 .PHONY : vocab
 vocab :
-	./scripts/training/make_vocab.sh
+	@./scripts/training/make_vocab.sh
 
 # Need this to force targets to build, even when the target file exists.
 .PHONY : phony-target
