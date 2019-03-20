@@ -14,6 +14,7 @@ The goal of this project is to provide an example of a high-quality personal res
 At a high-level, the structure of this project mimics that of AllenNLP. That is, the submodules in [nlpete](./nlpete) are organized in exactly the same way as in [allennlp](https://github.com/allenai/allennlp/tree/master/allennlp). But I've also provided a set of scripts that automate frequently used command sequences, such as running tests or experiments. The [Makefile](./Makefile) serves as the common interface to these scripts:
 
 - `make train`: Train a model. This is basically a wrapper around `allennlp train`, but provides a default serialization directory and automatically creates subdirectories of the serialization directory for different runs of the same experiment.
+- `make tensorboard`: Run a tensorboard instance locally.
 - `make test`: Equivalent to running `make typecheck`, `make lint`, `make unit-test`, and `make check-scripts`.
 - `make typecheck`: Runs the [mypy](http://mypy-lang.org/) typechecker.
 - `make lint`:  Runs [pydocstyle](https://github.com/PyCQA/pydocstyle) and [pylint](https://www.pylint.org/).
