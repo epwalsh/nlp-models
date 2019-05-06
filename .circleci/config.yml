@@ -76,7 +76,7 @@ workflows:
       - setup_and_run_checks
     triggers:
       - schedule:
-          cron: "0 7 * * *"
+          cron: "0 3 * * *"
           filters:
             branches:
               only:
