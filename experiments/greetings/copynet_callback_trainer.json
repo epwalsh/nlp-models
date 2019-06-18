@@ -90,7 +90,7 @@
         "should_log_parameter_statistics": false
       },
       {
-        "type": "learning_rate_scheduler",
+        "type": "update_learning_rate",
         "learning_rate_scheduler": {
           "type": "cosine",
           "t_initial": 5,
