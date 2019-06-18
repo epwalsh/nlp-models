@@ -1,0 +1,102 @@
+{
+  "dataset_reader": {
+    "target_namespace": "target_tokens",
+    "type": "copynet_seq2seq",
+    "source_token_indexers": {
+      "tokens": {
+        "type": "single_id",
+        "namespace": "source_tokens"
+      },
+      "token_characters": {
+        "type": "characters"
+      }
+    }
+  },
+  "vocabulary": {
+    "min_count": {
+      "source_tokens": 4,
+      "target_tokens": 4
+    }
+  },
+  "train_data_path": "data/greetings/train.tsv",
+  "validation_data_path": "data/greetings/validation.tsv",
+  "model": {
+    "type": "copynet_seq2seq",
+    "source_embedder": {
+      "tokens": {
+        "type": "embedding",
+        "vocab_namespace": "source_tokens",
+        "embedding_dim": 25,
+        "trainable": true
+      },
+      "token_characters": {
+        "type": "character_encoding",
+        "embedding": {
+          "embedding_dim": 10
+        },
+        "encoder": {
+          "type": "lstm",
+          "input_size": 10,
+          "hidden_size": 10,
+          "num_layers": 2,
+          "dropout": 0,
+          "bidirectional": true
+        }
+      }
+    },
+    "encoder": {
+      "type": "lstm",
+      "input_size": 45,
+      "hidden_size": 100,
+      "num_layers": 2,
+      "dropout": 0,
+      "bidirectional": true
+    },
+    "attention": {
+      "type": "bilinear",
+      "vector_dim": 200,
+      "matrix_dim": 200
+    },
+    "target_embedding_dim": 10,
+    "beam_size": 3,
+    "max_decoding_steps": 20,
+    "token_based_metric": {
+      "type": "token_sequence_accuracy"
+    }
+  },
+  "iterator": {
+    "type": "bucket",
+    "padding_noise": 0.0,
+    "batch_size" : 32,
+    "sorting_keys": [["source_tokens", "num_tokens"]]
+  },
+  "trainer": {
+    "type": "callback",
+    "optimizer": {
+      "type": "sgd",
+      "lr": 0.1
+    },
+    "num_epochs": 10,
+    "cuda_device": 0,
+    "callbacks": [
+      "generate_training_batches",
+      "train_supervised",
+      "checkpoint",
+      "validate",
+      "track_metrics",
+      {
+        "type": "log_to_tensorboard",
+        "should_log_learning_rate": true,
+        "should_log_parameter_statistics": false
+      },
+      {
+        "type": "update_learning_rate",
+        "learning_rate_scheduler": {
+          "type": "cosine",
+          "t_initial": 5,
+          "eta_mul": 0.9
+        }
+      }
+    ]
+  }
+}

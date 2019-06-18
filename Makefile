@@ -1,5 +1,6 @@
 debug         = 0
 test          = nlpete scripts
+port          = 5000
 COVERAGE     := $(addprefix --cov=, $(test))
 PYTHONPATH    = allennlp
 DATADIR       = data
