@@ -79,8 +79,6 @@
     "num_epochs": 10,
     "cuda_device": 0,
     "callbacks": [
-      "generate_training_batches",
-      "train_supervised",
       "checkpoint",
       "validate",
       "track_metrics",
