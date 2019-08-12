@@ -18,7 +18,13 @@ DOC_FILES = [
         "docs/**/*.md",
 ]
 
-OK_STATUS_CODES = [200, 403]
+OK_STATUS_CODES = (
+        200,
+        401,  # the resource exists but may require some sort of login.
+        403,  # ^ same
+        405,  # 'HEAD' method not allowed.
+        406,  # the resource exists, but our default 'Accept-' header may not match what the server can provide.
+)
 
 
 http_session = requests.Session()  # pylint: disable=invalid-name
@@ -39,13 +45,13 @@ class MatchTuple(NamedTuple):
     link: str
 
 
-def url_ok(match_tuple: MatchTuple) -> bool:
+def url_ok(match_tuple: MatchTuple) -> Tuple[bool, str]:
     """Check if a URL is reachable."""
     try:
-        result = http_session.get(match_tuple.link, timeout=5)
-        return result.ok or result.status_code in OK_STATUS_CODES
+        result = http_session.head(match_tuple.link, timeout=5)
+        return result.ok or result.status_code in OK_STATUS_CODES, f"status code = {result.status_code}"
     except (requests.ConnectionError, requests.Timeout):
-        return False
+        return False, "connection error"
 
 
 def path_ok(match_tuple: MatchTuple) -> bool:
@@ -55,13 +61,14 @@ def path_ok(match_tuple: MatchTuple) -> bool:
     return os.path.exists(full_path)
 
 
-def link_ok(match_tuple: MatchTuple) -> Tuple[MatchTuple, bool]:
+def link_ok(match_tuple: MatchTuple) -> Tuple[MatchTuple, bool, str]:
     if match_tuple.link.startswith("http"):
-        result_ok = url_ok(match_tuple)
+        result_ok, reason = url_ok(match_tuple)
     else:
         result_ok = path_ok(match_tuple)
+        reason = "doesn't exist"
     print(f"  {'✓' if result_ok else '✗'} {match_tuple.link}")
-    return match_tuple, result_ok
+    return match_tuple, result_ok, reason
 
 
 def main():
@@ -87,14 +94,15 @@ def main():
 
     with Pool(processes=10) as pool:
         results = pool.map(link_ok, [match for match in list(all_matches)])
-    unreachable_results = [result for result in results if not result[1]]
+    unreachable_results = [(match_tuple, reason) for match_tuple, success, reason in results if not success]
 
     if unreachable_results:
         print(f"Unreachable links ({len(unreachable_results)}):")
-        for result in unreachable_results:
-            print("  > Source: " + result[0].source)
-            print("    Name: " + result[0].name)
-            print("    Link: " + result[0].link)
+        for match_tuple, reason in unreachable_results:
+            print("  > Source: " + match_tuple.source)
+            print("    Name: " + match_tuple.name)
+            print("    Link: " + match_tuple.link)
+            print("    Reason: " + reason)
         sys.exit(1)
     print("No unreachable link found.")
 
