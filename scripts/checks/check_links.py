@@ -21,6 +21,18 @@ DOC_FILES = [
 OK_STATUS_CODES = [200, 403]
 
 
+http_session = requests.Session()  # pylint: disable=invalid-name
+for resource_prefix in ("http://", "https://"):
+    http_session.mount(
+            resource_prefix,
+            requests.adapters.HTTPAdapter(
+                    max_retries=5,
+                    pool_connections=20,
+                    #  pool_maxsize=50,  # doesn't matter since we're not using threads.
+            )
+    )
+
+
 class MatchTuple(NamedTuple):
     source: str
     name: str
@@ -30,7 +42,7 @@ class MatchTuple(NamedTuple):
 def url_ok(match_tuple: MatchTuple) -> bool:
     """Check if a URL is reachable."""
     try:
-        result = requests.get(match_tuple.link, timeout=5)
+        result = http_session.get(match_tuple.link, timeout=5)
         return result.ok or result.status_code in OK_STATUS_CODES
     except (requests.ConnectionError, requests.Timeout):
         return False
@@ -57,8 +69,8 @@ def main():
 
     project_root = (pathlib.Path(__file__).parent / "../..").resolve() # pylint: disable=no-member
     markdown_files: List[pathlib.Path] = []
-    for pattern in DOC_FILES:
-        markdown_files += list(project_root.glob(pattern))
+    for resource in DOC_FILES:
+        markdown_files += list(project_root.glob(resource))
 
     all_matches = set()
     url_regex = re.compile(r'\[([^!][^\]]+)\]\(([^)(]+)\)')
