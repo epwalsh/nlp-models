@@ -95,7 +95,7 @@ def main():
     print("Checking to make sure we can retrieve each link...")
 
     with Pool(processes=THREADS) as pool:
-        results = pool.map(link_ok, [match for match in list(all_matches)])
+        results = pool.map(link_ok, all_matches)
     unreachable_results = [(match_tuple, reason) for match_tuple, success, reason in results if not success]
 
     if unreachable_results:

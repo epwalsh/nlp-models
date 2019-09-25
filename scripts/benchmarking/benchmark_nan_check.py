@@ -26,7 +26,7 @@ def main():
     print(f"torch.topk: {result:.8f}")
 
     if torch.cuda.is_available():
-        x_gpu = x_cpu.cuda()  # pylint: disable=unused-variable
+        x_gpu = x_cpu.cuda()  # pylint: disable=unused-variable,possibly-unused-variable
         print("GPU results:")
         result = timeit.timeit("safe_topk(x_gpu, 5)", number=REPLICATIONS, globals={**globals(), **locals()})
         print(f"safe_topk:  {result:0.8f}")
