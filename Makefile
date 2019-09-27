@@ -50,7 +50,7 @@ $(EXPERIMENTDIR)/%.json : phony-target
 .PHONY : typecheck
 typecheck :
 	@echo "Typechecks: mypy"
-	@PYTHONPATH=$(PYTHONPATH) mypy $(test) --ignore-missing-imports
+	@PYTHONPATH=$(PYTHONPATH) mypy $(test) --ignore-missing-imports --no-site-packages
 
 .PHONY : lint
 lint :
