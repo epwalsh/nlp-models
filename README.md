@@ -17,7 +17,7 @@ At a high-level, the structure of this project mimics that of AllenNLP. That is,
 - `make tensorboard`: Run a tensorboard instance locally.
 - `make test`: Equivalent to running `make typecheck`, `make lint`, `make unit-test`, and `make check-scripts`.
 - `make typecheck`: Runs the [mypy](http://mypy-lang.org/) typechecker.
-- `make lint`:  Runs [pydocstyle](https://github.com/PyCQA/pydocstyle) and [pylint](https://www.pylint.org/).
+- `make lint`:  Runs [pydocstyle](https://github.com/PyCQA/pydocstyle), [flake8](http://flake8.pycqa.org/en/latest/), and [black](https://github.com/psf/black).
 - `make unit-test`: Runs all unit tests with [pytest](https://docs.pytest.org/en/latest/).
 - `make check-scripts`: Runs a few other scripts that check miscellaneous things not covered by the other tests.
 - `make create-branch`: A wrapper around the git functionality to create a new branch and push it upstream. You can name a branch after an issue number with `make create-branch issue=NUM` or give it an arbitrary name with `make create-branch name="my-branch"`.
