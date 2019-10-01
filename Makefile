@@ -56,8 +56,8 @@ typecheck :
 lint :
 	@echo "Lint: pydocstyle"
 	@pydocstyle --config=.pydocstyle $(test)
-	@echo "Lint: pylint"
-	@PYTHONPATH=$(PYTHONPATH) pylint --rcfile=.pylintrc -f colorized $(test)
+	@echo "Lint: flake8"
+	@PYTHONPATH=$(PYTHONPATH) flake8 $(test)
 
 .PHONY : unit-test
 unit-test :

@@ -76,7 +76,7 @@ def link_ok(match_tuple: MatchTuple) -> Tuple[MatchTuple, bool, str]:
 def main():
     print("Finding markdown files to check...")
 
-    project_root = (pathlib.Path(__file__).parent / "../..").resolve() # pylint: disable=no-member
+    project_root = (pathlib.Path(__file__).parent / "../..").resolve()
     markdown_files: List[pathlib.Path] = []
     for resource in DOC_FILES:
         markdown_files += list(project_root.glob(resource))

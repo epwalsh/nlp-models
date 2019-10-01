@@ -21,7 +21,7 @@ class CopyNetPredictor(Predictor):
                       "the 'seq2seq' predictor.", DeprecationWarning)
 
     def predict(self, source: str) -> JsonDict:
-        return self.predict_json({"source_string" : source})
+        return self.predict_json({"source_string": source})
 
     @overrides
     def _json_to_instance(self, json_dict: JsonDict) -> Instance:
