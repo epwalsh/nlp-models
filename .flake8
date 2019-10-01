@@ -1,0 +1,24 @@
+[flake8]
+max-line-length = 115
+
+exclude =
+    build/**
+    allennlp/**
+
+per-file-ignores =
+    # __init__.py files are allowed to have unused imports and lines-too-long
+    nlpete/__init__.py:F401
+    nlpete/**/__init__.py:F401,E501
+
+    # tests don't have to respect
+    #  E501: line length
+    #  E261: 2 spaces before comments (it would be ideal if they did, though)
+    #  E731: do not assign a lambda expression, use a def
+    #  F401: unused imports
+    nlpete/tests/**:E501,E261,E731,F401
+
+    # scripts don't have to respect
+    #  E501: line length
+    #  E402: imports not at top of file (because we mess with sys.path)
+    #  E302 expected 2 blank lines, found 1 (it would be ideal if they did, though)
+    scripts/**:E501,E402,E302
