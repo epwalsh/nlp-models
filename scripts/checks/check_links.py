@@ -13,17 +13,14 @@ from typing import Tuple, NamedTuple, List
 import requests
 
 
-DOC_FILES = [
-        "README.md",
-        "docs/**/*.md",
-]
+DOC_FILES = ["README.md", "docs/**/*.md"]
 
 OK_STATUS_CODES = (
-        200,
-        401,  # the resource exists but may require some sort of login.
-        403,  # ^ same
-        405,  # 'HEAD' method not allowed.
-        406,  # the resource exists, but our default 'Accept-' header may not match what the server can provide.
+    200,
+    401,  # the resource exists but may require some sort of login.
+    403,  # ^ same
+    405,  # 'HEAD' method not allowed.
+    406,  # the resource exists, but our default 'Accept-' header may not match what the server can provide.
 )
 
 THREADS = 10
@@ -32,12 +29,10 @@ THREADS = 10
 http_session = requests.Session()  # pylint: disable=invalid-name
 for resource_prefix in ("http://", "https://"):
     http_session.mount(
-            resource_prefix,
-            requests.adapters.HTTPAdapter(
-                    max_retries=5,
-                    pool_connections=20,
-                    pool_maxsize=THREADS,
-            )
+        resource_prefix,
+        requests.adapters.HTTPAdapter(
+            max_retries=5, pool_connections=20, pool_maxsize=THREADS
+        ),
     )
 
 
@@ -51,7 +46,10 @@ def url_ok(match_tuple: MatchTuple) -> Tuple[bool, str]:
     """Check if a URL is reachable."""
     try:
         result = http_session.head(match_tuple.link, timeout=5)
-        return result.ok or result.status_code in OK_STATUS_CODES, f"status code = {result.status_code}"
+        return (
+            result.ok or result.status_code in OK_STATUS_CODES,
+            f"status code = {result.status_code}",
+        )
     except (requests.ConnectionError, requests.Timeout):
         return False, "connection error"
 
@@ -82,21 +80,25 @@ def main():
         markdown_files += list(project_root.glob(resource))
 
     all_matches = set()
-    url_regex = re.compile(r'\[([^!][^\]]+)\]\(([^)(]+)\)')
+    url_regex = re.compile(r"\[([^!][^\]]+)\]\(([^)(]+)\)")
     for markdown_file in markdown_files:
         with open(markdown_file) as handle:
             for line in handle.readlines():
                 matches = url_regex.findall(line)
                 for name, link in matches:
-                    if 'localhost' not in link:
-                        all_matches.add(MatchTuple(source=str(markdown_file), name=name, link=link))
+                    if "localhost" not in link:
+                        all_matches.add(
+                            MatchTuple(source=str(markdown_file), name=name, link=link)
+                        )
 
     print(f"  {len(all_matches)} markdown files found")
     print("Checking to make sure we can retrieve each link...")
 
     with Pool(processes=THREADS) as pool:
         results = pool.map(link_ok, all_matches)
-    unreachable_results = [(match_tuple, reason) for match_tuple, success, reason in results if not success]
+    unreachable_results = [
+        (match_tuple, reason) for match_tuple, success, reason in results if not success
+    ]
 
     if unreachable_results:
         print(f"Unreachable links ({len(unreachable_results)}):")

@@ -31,11 +31,16 @@ class BLEU(Metric):
     gold target sequence for each predicted sequence.
     """
 
-    def __init__(self,
-                 ngram_weights: Iterable[float] = (0.25, 0.25, 0.25, 0.25),
-                 exclude_indices: Set[int] = None) -> None:
-        warnings.warn("This BLEU implementation has been contributed to AllenNLP, "
-                      "where it will be maintained.", DeprecationWarning)
+    def __init__(
+        self,
+        ngram_weights: Iterable[float] = (0.25, 0.25, 0.25, 0.25),
+        exclude_indices: Set[int] = None,
+    ) -> None:
+        warnings.warn(
+            "This BLEU implementation has been contributed to AllenNLP, "
+            "where it will be maintained.",
+            DeprecationWarning,
+        )
         self._ngram_weights = ngram_weights
         self._exclude_indices = exclude_indices or set()
         self._precision_matches: Dict[int, int] = Counter()
@@ -50,9 +55,9 @@ class BLEU(Metric):
         self._prediction_lengths = 0
         self._reference_lengths = 0
 
-    def _ngrams(self,
-                tensor: torch.LongTensor,
-                ngram_size: int) -> Dict[Tuple[int, ...], int]:
+    def _ngrams(
+        self, tensor: torch.LongTensor, ngram_size: int
+    ) -> Dict[Tuple[int, ...], int]:
         ngram_counts: Dict[Tuple[int, ...], int] = Counter()
         if ngram_size > tensor.size(-1):
             return ngram_counts
@@ -66,10 +71,12 @@ class BLEU(Metric):
                 ngram_counts[ngram] += 1
         return ngram_counts
 
-    def _get_modified_precision(self,
-                                predicted_tokens: torch.LongTensor,
-                                reference_tokens: torch.LongTensor,
-                                ngram_size: int) -> Tuple[int, int]:
+    def _get_modified_precision(
+        self,
+        predicted_tokens: torch.LongTensor,
+        reference_tokens: torch.LongTensor,
+        ngram_size: int,
+    ) -> Tuple[int, int]:
         clipped_matches = 0
         total_predicted = 0
         for batch_num in range(predicted_tokens.size(0)):
@@ -96,9 +103,9 @@ class BLEU(Metric):
         return valid_tokens_mask
 
     @overrides
-    def __call__(self,
-                 predictions: torch.LongTensor,
-                 gold_targets: torch.LongTensor) -> None:
+    def __call__(
+        self, predictions: torch.LongTensor, gold_targets: torch.LongTensor
+    ) -> None:
         """
         Parameters
         ----------
@@ -114,7 +121,8 @@ class BLEU(Metric):
         predictions, gold_targets = self.unwrap_to_tensors(predictions, gold_targets)
         for ngram_size, _ in enumerate(self._ngram_weights, start=1):
             precision_matches, precision_totals = self._get_modified_precision(
-                    predictions, gold_targets, ngram_size)
+                predictions, gold_targets, ngram_size
+            )
             self._precision_matches[ngram_size] += precision_matches
             self._precision_totals[ngram_size] += precision_totals
         if not self._exclude_indices:
@@ -129,9 +137,14 @@ class BLEU(Metric):
     @overrides
     def get_metric(self, reset: bool = False) -> Dict[str, float]:
         brevity_penalty = self._get_brevity_penalty()
-        ngram_scores = (weight * (math.log(self._precision_matches[n] + 1e-13) -
-                                  math.log(self._precision_totals[n] + 1e-13))
-                        for n, weight in enumerate(self._ngram_weights, start=1))
+        ngram_scores = (
+            weight
+            * (
+                math.log(self._precision_matches[n] + 1e-13)
+                - math.log(self._precision_totals[n] + 1e-13)
+            )
+            for n, weight in enumerate(self._ngram_weights, start=1)
+        )
         bleu = brevity_penalty * math.exp(sum(ngram_scores))
         if reset:
             self.reset()

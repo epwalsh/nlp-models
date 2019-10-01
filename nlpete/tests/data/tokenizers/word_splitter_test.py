@@ -6,7 +6,6 @@ from nlpete.data.tokenizers.word_splitter import NL2BashWordSplitter
 
 
 class TestNL2BashWordSplitter(AllenNlpTestCase):
-
     def setUp(self):
         super().setUp()
         self.word_splitter = NL2BashWordSplitter()

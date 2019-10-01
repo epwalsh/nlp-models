@@ -4,7 +4,6 @@ from nlpete.data.dataset_readers import NL2BashDatasetReader
 
 
 class TestNL2BashReader(AllenNlpTestCase):
-
     def setUp(self):
         super(TestNL2BashReader, self).setUp()
         self.reader = NL2BashDatasetReader("target_tokens")
@@ -14,10 +13,30 @@ class TestNL2BashReader(AllenNlpTestCase):
     def test_tokens(self):
         assert len(self.instances) == 3
         fields = self.instances[2].fields
-        assert [t.text for t in fields["source_tokens"].tokens] == \
-            ["@start@", "Extracts", " ", "a", " ", "bz", "2", " ", "file", ".", "@end@"]
-        assert [t.text for t in fields["target_tokens"].tokens] == \
-            ["@start@", "bunzip", "2", " ", "file", ".", "bz", "2", "@end@"]
+        assert [t.text for t in fields["source_tokens"].tokens] == [
+            "@start@",
+            "Extracts",
+            " ",
+            "a",
+            " ",
+            "bz",
+            "2",
+            " ",
+            "file",
+            ".",
+            "@end@",
+        ]
+        assert [t.text for t in fields["target_tokens"].tokens] == [
+            "@start@",
+            "bunzip",
+            "2",
+            " ",
+            "file",
+            ".",
+            "bz",
+            "2",
+            "@end@",
+        ]
 
     def test_preprocess_target(self):
         # pylint: disable=protected-access
