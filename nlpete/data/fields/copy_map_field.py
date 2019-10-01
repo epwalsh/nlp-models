@@ -11,20 +11,22 @@ from allennlp.data import Field
 
 
 class CopyMapField(Field[torch.Tensor]):
-
-    def __init__(self,
-                 source_tokens: List[Token],
-                 target_namespace: str) -> None:
+    def __init__(self, source_tokens: List[Token], target_namespace: str) -> None:
         self._source_tokens = source_tokens
         self._target_namespace = target_namespace
         self._mapping_array: Optional[List[List[int]]] = None
-        warnings.warn("CopyMapField has been deprecated. Please use "
-                      "NamespaceSwappingField instead.", DeprecationWarning)
+        warnings.warn(
+            "CopyMapField has been deprecated. Please use "
+            "NamespaceSwappingField instead.",
+            DeprecationWarning,
+        )
 
     @overrides
     def index(self, vocab: Vocabulary):
-        self._mapping_array = [vocab.get_token_index(x.text, self._target_namespace)
-                               for x in self._source_tokens]
+        self._mapping_array = [
+            vocab.get_token_index(x.text, self._target_namespace)
+            for x in self._source_tokens
+        ]
 
     @overrides
     def get_padding_lengths(self) -> Dict[str, int]:
@@ -38,5 +40,5 @@ class CopyMapField(Field[torch.Tensor]):
         return tensor
 
     @overrides
-    def empty_field(self) -> 'CopyMapField':
+    def empty_field(self) -> "CopyMapField":
         return CopyMapField([], self._target_namespace)

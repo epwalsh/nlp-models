@@ -49,30 +49,41 @@ class CopyNetDatasetReader(DatasetReader):
         ``source_token_indexers``.
     """
 
-    def __init__(self,
-                 target_namespace: str,
-                 source_tokenizer: Tokenizer = None,
-                 target_tokenizer: Tokenizer = None,
-                 source_token_indexers: Dict[str, TokenIndexer] = None,
-                 target_token_indexers: Dict[str, TokenIndexer] = None,
-                 lazy: bool = False) -> None:
+    def __init__(
+        self,
+        target_namespace: str,
+        source_tokenizer: Tokenizer = None,
+        target_tokenizer: Tokenizer = None,
+        source_token_indexers: Dict[str, TokenIndexer] = None,
+        target_token_indexers: Dict[str, TokenIndexer] = None,
+        lazy: bool = False,
+    ) -> None:
         super().__init__(lazy)
         self._target_namespace = target_namespace
         self._source_tokenizer = source_tokenizer or WordTokenizer()
         self._target_tokenizer = target_tokenizer or self._source_tokenizer
-        self._source_token_indexers = source_token_indexers or {"tokens": SingleIdTokenIndexer()}
-        self._target_token_indexers = target_token_indexers or self._source_token_indexers
-        warnings.warn("The 'copynet' dataset reader has been deprecated in favor of the "
-                      "'copynet_seq2seq' dataset reader (now part of the AllenNLP library).", DeprecationWarning)
+        self._source_token_indexers = source_token_indexers or {
+            "tokens": SingleIdTokenIndexer()
+        }
+        self._target_token_indexers = (
+            target_token_indexers or self._source_token_indexers
+        )
+        warnings.warn(
+            "The 'copynet' dataset reader has been deprecated in favor of the "
+            "'copynet_seq2seq' dataset reader (now part of the AllenNLP library).",
+            DeprecationWarning,
+        )
 
     @staticmethod
     def _read_line(line_num: int, line: str) -> Tuple[Optional[str], Optional[str]]:
         line = line.strip("\n")
         if not line:
             return None, None
-        line_parts = line.split('\t')
+        line_parts = line.split("\t")
         if len(line_parts) != 2:
-            raise ConfigurationError("Invalid line format: %s (line number %d)" % (line, line_num + 1))
+            raise ConfigurationError(
+                "Invalid line format: %s (line number %d)" % (line, line_num + 1)
+            )
         source_sequence, target_sequence = line_parts
         return source_sequence, target_sequence
 
@@ -95,7 +106,9 @@ class CopyNetDatasetReader(DatasetReader):
         return out
 
     @overrides
-    def text_to_instance(self, source_string: str, target_string: str = None) -> Instance:  # type: ignore
+    def text_to_instance(
+        self, source_string: str, target_string: str = None
+    ) -> Instance:  # type: ignore
         """
         Turn raw source string and target string into an `Instance`.
 
@@ -161,12 +174,14 @@ class CopyNetDatasetReader(DatasetReader):
 
         # For each token in the source sentence, we keep track of the matching token
         # in the target sentence (which will be the OOV symbol if there is no match).
-        source_to_target_field = CopyMapField(tokenized_source[1:-1], self._target_namespace)
+        source_to_target_field = CopyMapField(
+            tokenized_source[1:-1], self._target_namespace
+        )
 
         meta_fields = {"source_tokens": [x.text for x in tokenized_source[1:-1]]}
         fields_dict = {
-                "source_tokens": source_field,
-                "source_to_target": source_to_target_field,
+            "source_tokens": source_field,
+            "source_to_target": source_to_target_field,
         }
 
         if target_string is not None:
@@ -177,11 +192,12 @@ class CopyNetDatasetReader(DatasetReader):
 
             fields_dict["target_tokens"] = target_field
             meta_fields["target_tokens"] = [y.text for y in tokenized_target[1:-1]]
-            source_and_target_token_ids = self._tokens_to_ids(tokenized_source[1:-1] +
-                                                              tokenized_target)
-            source_token_ids = source_and_target_token_ids[:len(tokenized_source)-2]
+            source_and_target_token_ids = self._tokens_to_ids(
+                tokenized_source[1:-1] + tokenized_target
+            )
+            source_token_ids = source_and_target_token_ids[: len(tokenized_source) - 2]
             fields_dict["source_token_ids"] = ArrayField(np.array(source_token_ids))
-            target_token_ids = source_and_target_token_ids[len(tokenized_source)-2:]
+            target_token_ids = source_and_target_token_ids[len(tokenized_source) - 2 :]
             fields_dict["target_token_ids"] = ArrayField(np.array(target_token_ids))
         else:
             source_token_ids = self._tokens_to_ids(tokenized_source[1:-1])

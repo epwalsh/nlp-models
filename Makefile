@@ -58,6 +58,8 @@ lint :
 	@pydocstyle --config=.pydocstyle $(test)
 	@echo "Lint: flake8"
 	@PYTHONPATH=$(PYTHONPATH) flake8 $(test)
+	@echo "Lint: black"
+	@black --check $(test)
 
 .PHONY : unit-test
 unit-test :
@@ -78,6 +80,10 @@ check-scripts :
 
 .PHONY : test
 test : typecheck lint unit-test
+
+.PHONY : format
+format :
+	black $(test)
 
 #
 # Git helpers.
