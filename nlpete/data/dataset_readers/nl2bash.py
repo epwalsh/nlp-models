@@ -6,7 +6,7 @@ from overrides import overrides
 
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.tokenizers import Tokenizer, WordTokenizer
+from allennlp.data.tokenizers import Tokenizer
 from allennlp.data.token_indexers import TokenIndexer
 
 from nlpete.data.dataset_readers.copynet import CopyNetDatasetReader
@@ -110,9 +110,7 @@ class NL2BashDatasetReader(CopyNetDatasetReader):
         target_token_indexers: Dict[str, TokenIndexer] = None,
         lazy: bool = False,
     ) -> None:
-        source_tokenizer = source_tokenizer or WordTokenizer(
-            word_splitter=NL2BashWordSplitter()
-        )
+        source_tokenizer = source_tokenizer or NL2BashWordSplitter()
         target_tokenizer = target_tokenizer or source_tokenizer
         super().__init__(
             target_namespace,
