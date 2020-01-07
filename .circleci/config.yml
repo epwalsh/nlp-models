@@ -18,7 +18,7 @@ jobs:
       - restore_cache:
           name: Restoring dependencies cache
           keys:
-            - deps-v1-{{ checksum "allennlp/requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
+            - deps-v1-{{ checksum "allennlp/setup.py" }}-{{ checksum "allennlp/dev-requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
             - deps-v1-
 
       - run:
@@ -26,12 +26,12 @@ jobs:
           command: |
             python3 -m venv venv
             . venv/bin/activate
-            pip install -r allennlp/requirements.txt
+            cd allennlp && python setup.py install && cd -
             pip install -r additional_requirements.txt
 
       - save_cache:
           name: Saving dependencies cache
-          key: deps-v1-{{ checksum "allennlp/requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
+          key: deps-v1-{{ checksum "allennlp/setup.py" }}-{{ checksum "allennlp/dev-requirements.txt" }}-{{ checksum "additional_requirements.txt" }}
           paths:
             - venv
 
