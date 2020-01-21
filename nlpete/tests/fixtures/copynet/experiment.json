@@ -3,13 +3,10 @@
         "target_namespace": "target_tokens",
         "type": "copynet",
         "source_tokenizer": {
-            "type": "word",
-            "word_splitter": {
-                "type": "spacy"
-            }
+            "type": "spacy",
         },
         "target_tokenizer": {
-            "type": "word"
+            "type": "spacy"
         },
         "source_token_indexers": {
             "tokens": {
@@ -67,7 +64,6 @@
         "type": "bucket",
         "padding_noise": 0.0,
         "batch_size" : 80,
-        "sorting_keys": [["source_tokens", "num_tokens"]]
     },
     "trainer": {
         "num_epochs": 2,
