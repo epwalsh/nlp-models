@@ -5,18 +5,20 @@ defaults: &defaults
 
 version: 2
 jobs:
-  setup_and_run_checks:
+  test:
     <<: *defaults
     steps:
       - checkout
 
-      - restore_cache:
+      - &restore_cache
+        restore_cache:
           name: Restoring dependencies cache
           keys:
             - deps-v2-{{ checksum "Pipfile.lock" }}
             - deps-v2-
 
-      - run:
+      - &setup_environment
+        run:
           name: Installing dependencies
           command: |
             python -m venv .venv
@@ -24,28 +26,33 @@ jobs:
             pip install pipenv
             pipenv sync --pre --dev
 
-      - save_cache:
+      - &save_cache
+        save_cache:
           name: Saving dependencies cache
           key: deps-v2-{{ checksum "Pipfile.lock" }}
           paths:
             - .venv
 
-      - run:
+      - &check_scripts
+        run:
           name: Running check scripts
           command: |
             make check-scripts
 
-      - run:
+      - &lint
+        run:
           name: Running code linters
           command: |
             make lint
 
-      - run:
+      - &typecheck 
+        run:
           name: Running type checks
           command: |
             make typecheck
 
-      - run:
+      - &unit_tests
+        run:
           name: Running unit tests
           command: |
             make unit-test
@@ -55,14 +62,30 @@ jobs:
           command: |
             pipenv run codecov
 
+  nightly_test:
+    <<: *defaults
+    steps:
+      - checkout
+      - *restore_cache
+      - *setup_environment
+      - *save_cache
+      - run:
+          name: Update deps
+          command: |
+            pipenv update --dev
+      - *check_scripts
+      - *lint
+      - *typecheck
+      - *unit_tests
+
 workflows:
   version: 2
   test:
     jobs:
-      - setup_and_run_checks
+      - test
   nightly:
     jobs:
-      - setup_and_run_checks
+      - nightly_test
     triggers:
       - schedule:
           cron: "0 3 * * *"
