@@ -73,7 +73,6 @@ endif
 .PHONY : check-scripts
 check-scripts :
 	./scripts/checks/run_all.sh \
-		./scripts/checks/check_requirements.sh \
 		./scripts/checks/check_links.py \
 		./scripts/checks/check_whitespace.sh \
 		$(BENCHMARKS)

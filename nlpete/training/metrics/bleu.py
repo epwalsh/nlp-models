@@ -118,7 +118,7 @@ class BLEU(Metric):
         -------
         None
         """
-        predictions, gold_targets = self.unwrap_to_tensors(predictions, gold_targets)
+        predictions, gold_targets = self.detach_tensors(predictions, gold_targets)
         for ngram_size, _ in enumerate(self._ngram_weights, start=1):
             precision_matches, precision_totals = self._get_modified_precision(
                 predictions, gold_targets, ngram_size

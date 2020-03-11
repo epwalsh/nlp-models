@@ -42,3 +42,6 @@ class CopyMapField(Field[torch.Tensor]):
     @overrides
     def empty_field(self) -> "CopyMapField":
         return CopyMapField([], self._target_namespace)
+
+    def __len__(self):
+        return len(self._source_tokens)

@@ -63,13 +63,6 @@ class CopyNetTest(ModelTestCase):
         assert "hello" not in vocab._token_to_index[self.model._target_namespace]
         assert "world" not in vocab._token_to_index[self.model._target_namespace]
 
-    def test_missing_copy_token_raises(self):
-        param_overrides = json.dumps({"vocabulary": {"tokens_to_add": None}})
-        with pytest.raises(ConfigurationError):
-            self.ensure_model_can_train_save_and_load(
-                self.param_file, overrides=param_overrides
-            )
-
     def test_train_instances(self):
         inputs = self.instances[0].as_tensor_dict()
         source_tokens = inputs["source_tokens"]["tokens"]
@@ -135,7 +128,9 @@ class CopyNetTest(ModelTestCase):
         target_to_source = torch.tensor([[0, 1, 0], [0, 0, 0], [1, 0, 1]])
         # shape: (batch_size, trimmed_input_len)
 
-        copy_mask = torch.tensor([[1.0, 1.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 1.0]])
+        copy_mask = torch.tensor(
+            [[True, True, False], [True, False, False], [True, True, True]]
+        )
         # shape: (batch_size, trimmed_input_len)
 
         # This is what the log likelihood result should look like.
@@ -170,8 +165,16 @@ class CopyNetTest(ModelTestCase):
             ]
         )
 
+        generation_scores_mask = generation_scores.new_full(
+            generation_scores.size(), True, dtype=torch.bool
+        )
         ll_actual, selective_weights_actual = self.model._get_ll_contrib(
-            generation_scores, copy_scores, target_tokens, target_to_source, copy_mask
+            generation_scores,
+            generation_scores_mask,
+            copy_scores,
+            target_tokens,
+            target_to_source,
+            copy_mask,
         )
 
         np.testing.assert_almost_equal(ll_actual.data.numpy(), ll_check, decimal=6)
