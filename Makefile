@@ -2,7 +2,6 @@ debug         = 0
 test          = nlpete scripts
 port          = 5000
 COVERAGE     := $(addprefix --cov=, $(test))
-PYTHONPATH    = allennlp
 DATADIR       = data
 DATASETS     := $(wildcard $(DATADIR)/*.tar.gz)
 EXPERIMENTDIR = experiments
@@ -50,32 +49,29 @@ $(EXPERIMENTDIR)/%.json : phony-target
 .PHONY : typecheck
 typecheck :
 	@echo "Typechecks: mypy"
-	@PYTHONPATH=$(PYTHONPATH) mypy $(test) --ignore-missing-imports --no-site-packages
+	@pipenv run mypy $(test) --ignore-missing-imports --no-site-packages
 
 .PHONY : lint
 lint :
 	@echo "Lint: pydocstyle"
-	@pydocstyle --version
-	@pydocstyle --config=.pydocstyle $(test)
+	@pipenv run pydocstyle --config=.pydocstyle $(test)
 	@echo "Lint: flake8"
-	@flake8 --version
-	@PYTHONPATH=$(PYTHONPATH) flake8 $(test)
+	@pipenv run flake8 $(test)
 	@echo "Lint: black"
-	@black --version
-	@black --check --verbose $(test)
+	@pipenv run black --check --diff $(test)
 
 .PHONY : unit-test
 unit-test :
 	@echo "Unit tests: pytest"
 ifneq ($(findstring test,$(test)),)
-	PYTHONPATH=$(PYTHONPATH) python -m pytest -v --color=yes $(test)
+	@pipenv run python -m pytest -v --color=yes $(test)
 else
-	PYTHONPATH=$(PYTHONPATH) python -m pytest -v --cov-config .coveragerc $(COVERAGE) --color=yes $(test)
+	@pipenv run python -m pytest -v --cov-config .coveragerc $(COVERAGE) --color=yes $(test)
 endif
 
 .PHONY : check-scripts
 check-scripts :
-	./scripts/checks/run_all.sh \
+	pipenv run ./scripts/checks/run_all.sh \
 		./scripts/checks/check_links.py \
 		./scripts/checks/check_whitespace.sh \
 		$(BENCHMARKS)
