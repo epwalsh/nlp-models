@@ -9,8 +9,10 @@ from allennlp.data.tokenizers import Token, Tokenizer
 @Tokenizer.register("nl2bash")
 class NL2BashWordSplitter(Tokenizer):
     """
-    A ``WhitespaceTokenizer`` which keeps runs of (unicode) letters, digits, and whitespace
-    together, while every other non-whitespace character becomes a separate word.
+    A tokenizer for the NL2Bash model.
+
+    This is basically just a ``WhitespaceTokenizer`` which keeps runs of (unicode) letters,
+    digits, and whitespace together, while every other non-whitespace character becomes a separate word.
     """
 
     @overrides

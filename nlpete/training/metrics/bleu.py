@@ -107,11 +107,13 @@ class BLEU(Metric):
         self, predictions: torch.LongTensor, gold_targets: torch.LongTensor
     ) -> None:
         """
+        Update metric.
+
         Parameters
         ----------
         predictions : ``torch.LongTensor``, required
             Batched predicted tokens of shape `(batch_size, max_sequence_length)`.
-        references : ``torch.LongTensor``, required
+        gold_targets : ``torch.LongTensor``, required
             Batched reference (gold) translations with shape `(batch_size, max_gold_sequence_length)`.
 
         Returns

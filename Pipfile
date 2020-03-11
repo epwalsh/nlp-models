@@ -1,0 +1,24 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+mypy = "*"
+pytest = "*"
+flake8 = "*"
+black = "*"
+jedi = "*"
+pytest-cov = "*"
+coverage = "*"
+codecov = "*"
+pydocstyle = "*"
+neovim = "==0.2.6"
+msgpack = "==0.5.6"
+
+[packages]
+nlpete = {editable = true, path = "."}
+allennlp = {editable = true, git = "https://github.com/allenai/allennlp"}
+
+[pipenv]
+allow_prereleases = true

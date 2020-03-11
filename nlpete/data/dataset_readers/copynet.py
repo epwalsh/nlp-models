@@ -23,8 +23,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 @DatasetReader.register("copynet")
 class CopyNetDatasetReader(DatasetReader):
     """
-    Read a tsv file containing paired sequences, and create a dataset suitable for a
-    ``CopyNet`` model, or any model with a matching API.
+    Read a tsv file containing paired sequences for training a ``CopyNet`` model.
 
     Expected format for each input line: <source_sequence_string><tab><target_sequence_string>.
 
@@ -115,7 +114,9 @@ class CopyNetDatasetReader(DatasetReader):
         Parameters
         ----------
         source_string : ``str``, required
+            The source sentence.
         target_string : ``str``, optional
+            The target sentence.
 
         Returns
         -------

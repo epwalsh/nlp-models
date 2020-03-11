@@ -25,17 +25,17 @@ At a high-level, the structure of this project mimics that of AllenNLP. That is,
 
 ## Getting started
 
-The modules implemented here are built and tested nightly against the master branch of AllenNLP. Therefore it is recommended that you install AllenNLP from source. The easiest way to do that is as follows:
+The recommended way to setup a Python environment is using [`Pipenv`](https://pipenv.readthedocs.io/en/latest/basics/#). After installing `Pipenv`, just run
 
 ```
-git clone https://github.com/allenai/allennlp.git && cd allennlp
-./scripts/install_requirements.sh
-python setup.py develop
+pipenv install --pre --dev --python 3.6
 ```
 
-> NOTE: If you're not already familiar with AllenNLP, I would suggest starting with their [excellent tutorial](https://allennlp.org/tutorials).
+from within the root of your clone of this repository.
 
-After AllenNLP is installed, you can define your own experiments with an AllenNLP model config file, and then run
+> Swap out 3.6 for 3.7 if you wish to use Python 3.7.
+
+After your environment is setup you can define your own experiments with an AllenNLP model config file, and then run
 
 ```bash
 make train
