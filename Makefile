@@ -55,11 +55,14 @@ typecheck :
 .PHONY : lint
 lint :
 	@echo "Lint: pydocstyle"
+	@pydocstyle --version
 	@pydocstyle --config=.pydocstyle $(test)
 	@echo "Lint: flake8"
+	@flake8 --version
 	@PYTHONPATH=$(PYTHONPATH) flake8 $(test)
 	@echo "Lint: black"
-	@black --check $(test)
+	@black --version
+	@black --check --verbose $(test)
 
 .PHONY : unit-test
 unit-test :
