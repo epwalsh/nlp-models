@@ -13,8 +13,8 @@ jobs:
       - restore_cache:
           name: Restoring dependencies cache
           keys:
-            - deps-v1-{{ checksum "Pipfile.lock" }}
-            - deps-v1-
+            - deps-v2-{{ checksum "Pipfile.lock" }}
+            - deps-v2-
 
       - run:
           name: Installing dependencies
@@ -26,7 +26,7 @@ jobs:
 
       - save_cache:
           name: Saving dependencies cache
-          key: deps-v1-{{ checksum "Pipfile.lock" }}
+          key: deps-v2-{{ checksum "Pipfile.lock" }}
           paths:
             - .venv
 
