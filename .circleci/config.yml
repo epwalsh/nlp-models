@@ -33,6 +33,12 @@ jobs:
           paths:
             - .venv
 
+      - &debug
+        run:
+          name: Debugging Info
+          command: |
+            pipenv run pip freeze
+
       - &check_scripts
         run:
           name: Running check scripts
@@ -73,6 +79,7 @@ jobs:
           name: Update deps
           command: |
             pipenv update --dev
+      - *debug
       - *check_scripts
       - *lint
       - *typecheck
